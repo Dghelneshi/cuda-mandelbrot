@@ -1,0 +1,28 @@
+*/Debug
+*/Release
+*/x64
+*.sdf
+*.suo
+*.hmi
+*.user
+*.pdb
+
+/bin
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Linux
+*~
+.directory
+.fuse_hidden*
+.nfs*
+
+# Windows
+Desktop.ini
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
