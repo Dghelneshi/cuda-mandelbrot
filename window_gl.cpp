@@ -1,3 +1,5 @@
+#ifndef CM_NOGL
+
 #ifdef _WIN32
     #define WINDOWS_LEAN_AND_MEAN
     #define NOMINMAX
@@ -16,6 +18,7 @@
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 #include <helper_cuda_gl.h>
+#include <math.h>
 #include "stdint.h"
 #include "timing.h"
 #include "window_gl.h"
@@ -237,3 +240,5 @@ bool initGLWindow(int argc, const char *argv[]) {
 
     return true;
 }
+
+#endif
