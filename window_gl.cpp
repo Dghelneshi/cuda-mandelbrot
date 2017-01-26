@@ -29,7 +29,8 @@ static void displayTexture();
 
 static GLuint pbo; // this PBO is used to connect CUDA and OpenGL
 static GLuint result_texture; // the result is copied to this OpenGL texture
-static float4* compute_buffer;
+static uint32_t* image_buffer;
+#define IMAGE_FORMAT GL_BGRA
 
 static uint32_t window_width = 1200;
 static uint32_t window_height = 800;
@@ -40,7 +41,6 @@ static double speed = 0.1;
 static double zoomSpeed = 1.1;
 static double maxlen2 = 1024.0;
 static pos_t pos;
-
 
 static void display() {
     glClearColor(0, 0, 0, 0);
@@ -54,16 +54,16 @@ static void display() {
     }
     t = startCudaTimer();
 
-    checkCudaErrors(cudaGLMapBufferObject((void**) &compute_buffer, pbo));
+    checkCudaErrors(cudaGLMapBufferObject((void**) &image_buffer, pbo));
 
-    launchKernel(compute_buffer, image_width, image_height, pos, maxlen2);
+    launchKernel(image_buffer, image_width, image_height, pos, maxlen2);
 
     checkCudaErrors(cudaGLUnmapBufferObject(pbo));
 
     // download texture from destination PBO
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
     glBindTexture(GL_TEXTURE_2D, result_texture);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, image_width, image_height, GL_RGBA, GL_FLOAT, NULL);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, image_width, image_height, IMAGE_FORMAT, GL_UNSIGNED_BYTE, NULL);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
     SDK_CHECK_ERROR_GL();
 
@@ -172,7 +172,7 @@ static void initGLBuffers() {
 
     // initialize the PBO for transferring data from CUDA to openGL
     size_t num_texels = image_width * image_height;
-    size_t size_tex_data = sizeof(float4) * num_texels;
+    size_t size_tex_data = sizeof(*image_buffer) * num_texels;
     void* data = malloc(size_tex_data);
 
     // create buffer object
@@ -198,7 +198,7 @@ static void initGLBuffers() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // buffer data
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, image_width, image_height, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, IMAGE_FORMAT, GL_UNSIGNED_BYTE, NULL);
     SDK_CHECK_ERROR_GL();
 }
 
