@@ -27,6 +27,19 @@ static const uint32_t blockSizeX = 16;
 static const uint32_t blockSizeY = 8;
 
 
+__device__ uint32_t rgbToInt(float r, float g, float b)
+{
+    r = clamp(r, 0.0f, 1.0f) * 255.99f;
+    g = clamp(g, 0.0f, 1.0f) * 255.99f;
+    b = clamp(b, 0.0f, 1.0f) * 255.99f;
+    return (uint32_t(r) << 16) | (uint32_t(g) << 8) | uint32_t(b); // ARGB in register -> BGRA in memory
+}
+__device__ uint32_t rgbToInt(float3 &c)
+{
+    return rgbToInt(c.x, c.y, c.z);
+}
+
+
 __device__ double mandelbrot(double x, double y, double zoom, double maxlen2) {
     
     double2 c = make_double2(x, y);
@@ -51,10 +64,6 @@ __device__ double mandelbrot(double x, double y, double zoom, double maxlen2) {
     // distance	estimation
     // d(c) = |z|*log|z|/|z'|
     double d = 0.5 * sqrt(len2 / dot(dz, dz)) * log(len2);
-
-    // do some soft coloring based on distance
-    d = clamp(12.0 * d / zoom, 0.0, 1.0);
-    d = rcbrt(rsqrt(d)); // d^(1/6)
     
     return d;
 }
@@ -87,15 +96,11 @@ __device__ double mandelbrot3(double x, double y, double zoom, double maxlen2) {
     // d(c) = |z|*log|z|/|z'|
     double d = 0.5 * sqrt(len2 / dot(dz, dz)) * log(len2);
 
-    // do some soft coloring based on distance
-    d = clamp(12.0 * d / zoom, 0.0, 1.0);
-    d = rcbrt(rsqrt(d)); // d^(1/6)
-
     return d;
 }
 
 
-__global__ void kernel(float4 *out_data, uint32_t w, uint32_t h, double centerX, double centerY, double zoom, double maxlen2) {
+__global__ void kernel(uint32_t *image_buffer, uint32_t w, uint32_t h, double centerX, double centerY, double zoom, double maxlen2) {
     // image x and y coordinates
     uint32_t ix = blockIdx.x*blockDim.x + threadIdx.x;
     uint32_t iy = blockIdx.y*blockDim.y + threadIdx.y;
@@ -112,18 +117,24 @@ __global__ void kernel(float4 *out_data, uint32_t w, uint32_t h, double centerX,
     double x = zoom * nx + centerX;
     double y = zoom * ny + centerY;
 
-    double brot = mandelbrot(x, y, zoom, maxlen2);
+    double dist = mandelbrot(x, y, zoom, maxlen2);
 
-    out_data[iy * w + ix] = make_float4(brot, brot, brot, 1.0f);
+    // do some soft coloring based on distance
+    dist = clamp(12.0 * dist / zoom, 0.0, 1.0);
+    dist = rcbrt(rsqrt(dist)); // dist^(1/6)
+
+    float3 rgb = make_float3(0, cos(dist * 3.14159), sin(dist * 3.14159));
+
+    image_buffer[iy * w + ix] = rgbToInt(rgb);
 }
 
 extern "C" {
 
-    void launchKernel(float4* compute_buffer, uint32_t w, uint32_t h, pos_t pos, double maxlen2) {
+    void launchKernel(uint32_t* image_buffer, uint32_t w, uint32_t h, pos_t pos, double maxlen2) {
         dim3 block(blockSizeX, blockSizeY, 1);
         dim3 grid((w + block.x - 1) / block.x, (h + block.y - 1) / block.y, 1);
 
-        kernel << <grid, block >> >(compute_buffer, w, h, pos.centerX, pos.centerY, pos.zoom, maxlen2);
+        kernel << <grid, block >> >(image_buffer, w, h, pos.centerX, pos.centerY, pos.zoom, maxlen2);
     }
 
 }

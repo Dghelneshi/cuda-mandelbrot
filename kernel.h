@@ -11,5 +11,5 @@ typedef struct pos_s {
 } pos_t;
 
 extern "C" {
-    void launchKernel(float4* compute_buffer, uint32_t w, uint32_t h, pos_t pos, double maxlen2);
+    void launchKernel(uint32_t* image_buffer, uint32_t w, uint32_t h, pos_t pos, double maxlen2);
 }
