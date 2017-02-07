@@ -5,6 +5,10 @@
 #define WIDTH 1920
 #define LENGTH 1080
 
+#include <main.h>
+#include <kernel.h>
+#include <stdint.h>
+
 static double maxlen = 1024.0;
 static pos_t pos;
 
