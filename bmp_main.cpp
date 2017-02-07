@@ -3,19 +3,23 @@
  *
  */
 #define WIDTH 1920
-#define LENGTH 1080
+#define HEIGHT 1080
 
-#include <main.h>
-#include <kernel.h>
+#include "main.h"
+#include "kernel.h"
+#include "bmp_output.h"
+#include <stdlib.h>
 #include <stdint.h>
 
 static double maxlen = 1024.0;
 static pos_t pos;
 
-int bmpMain(int argc, const char*argc[]){
+int bmpMain(){
 				//this goes into bmp_output
-				char* imageData;
+				uint32_t* imageData;
 				launchKernel(imageData, WIDTH, HEIGHT, pos, maxlen);
 
-				print_bmp ( WIDTH, HEIGHT, imageData );
+				print_bmp ( WIDTH, HEIGHT, (char*)imageData );
+				
+				return EXIT_SUCCESS;
 }
