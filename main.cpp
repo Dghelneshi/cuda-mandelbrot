@@ -52,7 +52,11 @@ int main(int argc, const char* argv[]) {
 #endif
     }
     else {
-        // TODO: do stuff without OpenGL
+#ifdef CM_NOGL
+				cudaProfilerStart();	
+				//do the BMP stuff
+				bmpMain(argc, argv);
+#endif
     }
 
     terminate(0);
