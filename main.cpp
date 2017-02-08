@@ -26,7 +26,7 @@
 #include "main.h"
 #include "kernel.h"
 
-
+#include "bmp_main.h"
 
 
 void terminate(int code) {
@@ -53,7 +53,7 @@ int main(int argc, const char* argv[]) {
     else {
 				cudaProfilerStart();	
 				//do the BMP stuff
-				bmpMain(argc, argv);
+				bmpMain();
     }
 
     terminate(0);
