@@ -40,8 +40,7 @@ int main(int argc, const char* argv[]) {
     cudaProfilerStop();
     initTime();
 
-    //if (argc > 1 && (strcmp(argv[1], "-gl") == 0)) {
-    if (true) {
+    if (argc > 1 && (strcmp(argv[1], "-gl") == 0)) {
 #ifndef CM_NOGL
         if (!initGLWindow(argc, argv))
             return 1;
@@ -52,11 +51,9 @@ int main(int argc, const char* argv[]) {
 #endif
     }
     else {
-#ifdef CM_NOGL
 				cudaProfilerStart();	
 				//do the BMP stuff
 				bmpMain(argc, argv);
-#endif
     }
 
     terminate(0);
