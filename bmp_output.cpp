@@ -11,7 +11,7 @@
 #define BYTE_ALIGNMENT 4  /* probably shouldn't change this */
 #define BYTE_OFFSET 54
 #define HEADER_SIZE 40
-#define IMG_SIZE width * height * BYTESPERPIXEL
+#define IMG_SIZE (width * height * BYTESPERPIXEL)
 
 /*
  * thingy that every bmp file needs at the beginning of it.
@@ -71,21 +71,21 @@ int print_bmp( int width, int height, char *imageData  )
 									&bmpHeader, 
 									sizeof(char), 
 									(size_t)HEADER_SIZE, 
-									stdout );	
+									outputFile );	
 
 	/* print the padding between header and data */
 	fwrite(
 									imageData, /* or literally anything else! */
 									sizeof(char),
 									(size_t) (BYTE_OFFSET - HEADER_SIZE), /* size of padding */
-								 	stdout );	
+								 	outputFile );	
 
 	/* print the image */
 	fwrite( 
 									imageData, 
 									sizeof(char), 
 									(size_t)(BYTESPERPIXEL * IMG_SIZE),
-									stdout );
+									outputFile );
 	fclose(outputFile);
 
 
