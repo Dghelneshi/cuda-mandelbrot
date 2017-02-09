@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <cuda_runtime.h>
 
-#define BUFSIZE WIDTH * HEIGHT * BYTESPERPIXEL
+#define BUFSIZE (WIDTH * HEIGHT * BYTESPERPIXEL)
 
 static double maxlen = 1024.0;
 static pos_t pos;

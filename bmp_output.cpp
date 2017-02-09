@@ -10,7 +10,7 @@
 
 #define BYTE_ALIGNMENT 4  /* probably shouldn't change this */
 #define BYTE_OFFSET 54
-#define HEADER_SIZE 40
+#define HEADER_SIZE 40 // only size of info header. NOT sizeof(BitmapHeader)!
 #define IMG_SIZE (width * height * BYTESPERPIXEL)
 
 /*
@@ -70,21 +70,21 @@ int print_bmp( int width, int height, char *imageData  )
 	fwrite( 
 									&bmpHeader, 
 									sizeof(char), 
-									(size_t)HEADER_SIZE, 
+									sizeof(bmpHeader), 
 									outputFile );	
 
 	/* print the padding between header and data */
 	fwrite(
 									imageData, /* or literally anything else! */
 									sizeof(char),
-									(size_t) (BYTE_OFFSET - HEADER_SIZE), /* size of padding */
+									BYTE_OFFSET - sizeof(bmpHeader), /* size of padding */
 								 	outputFile );	
 
 	/* print the image */
 	fwrite( 
 									imageData, 
 									sizeof(char), 
-									(size_t)(BYTESPERPIXEL * IMG_SIZE),
+									(size_t)(IMG_SIZE),
 									outputFile );
 	fclose(outputFile);
 

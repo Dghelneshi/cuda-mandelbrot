@@ -1,6 +1,4 @@
-
-#include "main.h"
-#include "bmp_output.h"
+#pragma once
 
 int bmpMain();
 
