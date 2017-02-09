@@ -62,7 +62,7 @@ int print_bmp( int width, int height, char *imageData  )
 	bmpHeader.imageWidth = width;
 	bmpHeader.imageHeight = height;
 	bmpHeader.imagePlanes = 1;
-	bmpHeader.bitsPerPixel = 8 * BYTES_PER_PIXEL;
+	bmpHeader.bitsPerPixel = 8 * BYTESPERPIXEL;
 	bmpHeader.compressionType = 0; /* uncompressed */
 	bmpHeader.imageSize = (lineSize * height);
 	bmpHeader.fileSize = bmpHeader.byteOffset + bmpHeader.imageSize;
@@ -89,7 +89,7 @@ int print_bmp( int width, int height, char *imageData  )
 	fwrite( 
 									imageData, 
 									sizeof(char), 
-									(size_t)(BYTES_PER_PIXEL * bmpHeader.imageSize),
+									(size_t)(BYTESPERPIXEL * bmpHeader.imageSize),
 									stdout );
 
 
