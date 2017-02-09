@@ -26,7 +26,7 @@
 #include "main.h"
 #include "kernel.h"
 
-
+#include "bmp_main.h"
 
 
 void terminate(int code) {
@@ -40,8 +40,7 @@ int main(int argc, const char* argv[]) {
     cudaProfilerStop();
     initTime();
 
-    //if (argc > 1 && (strcmp(argv[1], "-gl") == 0)) {
-    if (true) {
+    if (argc > 1 && (strcmp(argv[1], "-gl") == 0)) {
 #ifndef CM_NOGL
         if (!initGLWindow(argc, argv))
             return 1;
@@ -52,7 +51,9 @@ int main(int argc, const char* argv[]) {
 #endif
     }
     else {
-        // TODO: do stuff without OpenGL
+				cudaProfilerStart();	
+				//do the BMP stuff
+				bmpMain();
     }
 
     terminate(0);
