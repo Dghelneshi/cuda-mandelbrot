@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include "bmp_output.h"
 
 #define BYTE_ALIGNMENT 4  /* probably shouldn't change this */
 #define BYTE_OFFSET 54
@@ -49,7 +50,7 @@ int print_bmp( int width, int height, char *imageData  )
 	 * this variable contains the exact amount of bytes a line should have
 	 **/
 	int lineSize = width +1;
-	lineSize *= BYTES_PER_PIXEL;
+	lineSize *= BYTESPERPIXEL;
 	lineSize /= BYTE_ALIGNMENT;
 	lineSize *= BYTE_ALIGNMENT;
 	
