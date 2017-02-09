@@ -16,8 +16,12 @@ static pos_t pos;
 
 int bmpMain(){
 				//this goes into bmp_output
-				uint32_t* imageData;
-				launchKernel(imageData, WIDTH, HEIGHT, pos, maxlen);
+				uint32_t* memBuffer;	// image in memory
+				uint32_t* gpuBuffer;	// image in gpu memory
+				cudaMalloc;
+				launchKernel(gpuBuffer, WIDTH, HEIGHT, pos, maxlen);
+				malloc;
+				cudaMemcpy 
 
 				print_bmp ( WIDTH, HEIGHT, (char*)imageData );
 				
