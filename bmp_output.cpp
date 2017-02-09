@@ -6,8 +6,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include "bmp_output.h"
 
-#define BYTES_PER_PIXEL 4 /* set to 4 if you want 32 bit instead of 24 */
 #define BYTE_ALIGNMENT 4  /* probably shouldn't change this */
 #define BYTE_OFFSET 54
 #define HEADER_SIZE 40
@@ -50,7 +50,7 @@ int print_bmp( int width, int height, char *imageData  )
 	 * this variable contains the exact amount of bytes a line should have
 	 **/
 	int lineSize = width +1;
-	lineSize *= BYTES_PER_PIXEL;
+	lineSize *= BYTESPERPIXEL;
 	lineSize /= BYTE_ALIGNMENT;
 	lineSize *= BYTE_ALIGNMENT;
 	
@@ -63,7 +63,7 @@ int print_bmp( int width, int height, char *imageData  )
 	bmpHeader.imageWidth = width;
 	bmpHeader.imageHeight = height;
 	bmpHeader.imagePlanes = 1;
-	bmpHeader.bitsPerPixel = 8 * BYTES_PER_PIXEL;
+	bmpHeader.bitsPerPixel = 8 * BYTESPERPIXEL;
 	bmpHeader.compressionType = 0; /* uncompressed */
 	bmpHeader.imageSize = (lineSize * height);
 	bmpHeader.fileSize = bmpHeader.byteOffset + bmpHeader.imageSize;
@@ -90,7 +90,7 @@ int print_bmp( int width, int height, char *imageData  )
 	fwrite( 
 									imageData, 
 									sizeof(char), 
-									(size_t)(BYTES_PER_PIXEL * bmpHeader.imageSize),
+									(size_t)(BYTESPERPIXEL * bmpHeader.imageSize),
 									stdout );
 
 
