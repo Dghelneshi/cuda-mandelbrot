@@ -11,6 +11,7 @@
 #define BYTE_ALIGNMENT 4  /* probably shouldn't change this */
 #define BYTE_OFFSET 54
 #define HEADER_SIZE 40
+#define IMG_SIZE width * height * BYTESPERPIXEL
 
 /*
  * thingy that every bmp file needs at the beginning of it.
@@ -45,14 +46,6 @@ struct BitmapHeader
 int print_bmp( int width, int height, char *imageData  )
 {
 	struct BitmapHeader bmpHeader;
-
-	/* to assure alignment of "lines" along 4byte borders 
-	 * this variable contains the exact amount of bytes a line should have
-	 **/
-	int lineSize = width +1;
-	lineSize *= BYTESPERPIXEL;
-	lineSize /= BYTE_ALIGNMENT;
-	lineSize *= BYTE_ALIGNMENT;
 	
 	/* write some actual data into the header */
 	bmpHeader.fileType[0] = 'B';
@@ -65,13 +58,14 @@ int print_bmp( int width, int height, char *imageData  )
 	bmpHeader.imagePlanes = 1;
 	bmpHeader.bitsPerPixel = 8 * BYTESPERPIXEL;
 	bmpHeader.compressionType = 0; /* uncompressed */
-	bmpHeader.imageSize = (lineSize * height);
-	bmpHeader.fileSize = bmpHeader.byteOffset + bmpHeader.imageSize;
+	bmpHeader.imageSize = 0;
+	bmpHeader.fileSize = bmpHeader.byteOffset + IMG_SIZE;
 	bmpHeader.pixelsPerMeterX = 0; /* this doesn't apply to our use-case */
 	bmpHeader.pixelsPerMeterY = 0;
 	bmpHeader.colorTableSize = 0;	/* no color table */
 	bmpHeader.importantColorSize = 0; /* no particularly important colors */
 
+	FILE *outputFile = fopen("output.bmp", "wb");
 	/* print the header  */
 	fwrite( 
 									&bmpHeader, 
@@ -90,9 +84,9 @@ int print_bmp( int width, int height, char *imageData  )
 	fwrite( 
 									imageData, 
 									sizeof(char), 
-									(size_t)(BYTESPERPIXEL * bmpHeader.imageSize),
+									(size_t)(BYTESPERPIXEL * IMG_SIZE),
 									stdout );
-
+	fclose(outputFile);
 
 
 	return EXIT_SUCCESS;
