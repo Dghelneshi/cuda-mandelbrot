@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define BYTES_PER_PIXEL 4 /* set to 4 if you want 32 bit instead of 24 */
 #define BYTE_ALIGNMENT 4  /* probably shouldn't change this */
 #define BYTE_OFFSET 54
 #define HEADER_SIZE 40
