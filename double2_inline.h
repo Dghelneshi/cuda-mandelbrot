@@ -1,6 +1,6 @@
+#pragma once
 
 // operators & functions for double2
-// TODO: make a real complex<T> data type, this is barely useful
 
 inline __host__ __device__ double dot(double2 a, double2 b)
 {

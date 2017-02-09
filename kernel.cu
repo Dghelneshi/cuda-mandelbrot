@@ -40,6 +40,11 @@ __device__ uint32_t rgbToInt(float3 &c)
 }
 
 
+// TODO: template bullshit. define cm_complex<float> = float2, cm_complex<double> = double2 somehow.
+template<typename T>
+__device__ T mandelbrot(T x, T y, T zoom, T maxlen2);
+
+template<>
 __device__ double mandelbrot(double x, double y, double zoom, double maxlen2) {
     
     double2 c = make_double2(x, y);
@@ -83,9 +88,8 @@ __device__ double mandelbrot3(double x, double y, double zoom, double maxlen2) {
         dz = 3.0 * make_double2(z2.x * dz.x - z2.y * dz.y, z2.x * dz.y + z2.y * dz.x) + make_double2(1.0, 0.0);
 
         // z = z^3 + c
-        // z^3 = x^3 - 3 x y^2 + i (3 x^2 y - y^3)
-        z = make_double2(z.x*z.x*z.x - 3.0 * z.x * z.y*z.y, 3.0 * z.x*z.x*z.y - z.y*z.y*z.y) + c;
-
+        z = make_double2(z2.x*z.x - z2.y*z.y, z2.x*z.y + z2.y*z.x) + c;
+        
         len2 = dot(z, z);
 
         // if z is too far from the origin, assume divergence
@@ -117,7 +121,7 @@ __global__ void kernel(uint32_t *image_buffer, uint32_t w, uint32_t h, double ce
     double x = zoom * nx + centerX;
     double y = zoom * ny + centerY;
 
-    double dist = mandelbrot(x, y, zoom, maxlen2);
+    double dist = mandelbrot<double>(x, y, zoom, maxlen2);
 
     // do some soft coloring based on distance
     dist = clamp(12.0 * dist / zoom, 0.0, 1.0);
