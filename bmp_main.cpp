@@ -23,7 +23,7 @@ int bmpMain(){
 				uint32_t* gpuBuffer;				// image in gpu memory
 				cudaMalloc( (void**)&gpuBuffer, BUFSIZE);	// allocate gpu buffer
 				launchKernel(gpuBuffer, WIDTH, HEIGHT, pos, maxlen);
-				memBuffer = (uint32_t)malloc(BUFSIZE);		// allocate memory buffer
+				memBuffer = (uint32_t*)malloc(BUFSIZE);		// allocate memory buffer
 				cudaMemcpy(
 						memBuffer,
 						gpuBuffer,
