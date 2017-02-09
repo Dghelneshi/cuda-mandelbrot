@@ -10,6 +10,7 @@
 #include "bmp_output.h"
 #include <stdlib.h>
 #include <stdint.h>
+#include <cuda_runtime.h>
 
 #define BUFSIZE WIDTH * HEIGHT * BYTESPERPIXEL
 
@@ -22,7 +23,7 @@ int bmpMain(){
 				uint32_t* gpuBuffer;				// image in gpu memory
 				cudaMalloc( (void**)&gpuBuffer, BUFSIZE);	// allocate gpu buffer
 				launchKernel(gpuBuffer, WIDTH, HEIGHT, pos, maxlen);
-				malloc(memBuffer, BUFSIZE);			// allocate memory buffer
+				membuffer = malloc(BUFSIZE);			// allocate memory buffer
 				cudaMemcpy(memBuffer, gpuBuffer);		// copy the image from gpu into memory
 
 				print_bmp ( WIDTH, HEIGHT, (char*)imageData );
