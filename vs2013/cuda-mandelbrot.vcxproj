@@ -116,6 +116,8 @@ copy "$(SolutionDir)..\lib\*.dll" "$(OutDir)"</Command>
     <CudaCompile Include="..\kernel.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\bmp_main.h" />
+    <ClInclude Include="..\bmp_output.h" />
     <ClInclude Include="..\double2_inline.h" />
     <ClInclude Include="..\kernel.h" />
     <ClInclude Include="..\main.h" />
@@ -123,6 +125,8 @@ copy "$(SolutionDir)..\lib\*.dll" "$(OutDir)"</Command>
     <ClInclude Include="..\timing.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\bmp_main.cpp" />
+    <ClCompile Include="..\bmp_output.cpp" />
     <ClCompile Include="..\glew.c" />
     <ClCompile Include="..\main.cpp" />
     <ClCompile Include="..\timing.cpp" />
