@@ -13,10 +13,12 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
-#include "Kernel.h"
+#include <math_functions.h>
+#include "kernel.h"
 #include "float.h"
 #include "mandelbrot_variants.cuh"
 
+#define M_PI_F 3.14159265358979323846f
 #define BLOCK_SIZE_X 16
 #define BLOCK_SIZE_Y 8
 
@@ -77,7 +79,7 @@ __global__ void SwitchKernel(cm_variants v, uint32_t *image_buffer, uint32_t w, 
     float normdist = clamp(12.0f * float(dist / zoom), 0.0f, 1.0f);
     normdist = rcbrt(rsqrt(normdist)); // dist^(1/6)
 
-    float3 rgb = make_float3(0.0f, cos(normdist * 3.14159f), sin(normdist * 3.14159f));
+    float3 rgb = make_float3(0.0f, cos(normdist * M_PI_F), sin(normdist * M_PI_F));
 
     image_buffer[iy * w + ix] = RgbToInt(rgb);
 }
@@ -108,7 +110,7 @@ __global__ void TemplateKernel(uint32_t *image_buffer, uint32_t w, uint32_t h, T
     float normdist = clamp(12.0f * float(dist / zoom), 0.0f, 1.0f);
     normdist = rcbrt(rsqrt(normdist)); // dist^(1/6)
 
-    float3 rgb = make_float3(0.0f, cos(normdist * 3.14159f), sin(normdist * 3.14159f));
+    float3 rgb = make_float3(0.0f, cos(normdist * M_PI_F), sin(normdist * M_PI_F));
 
     image_buffer[iy * w + ix] = RgbToInt(rgb);
 }

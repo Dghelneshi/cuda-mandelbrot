@@ -21,7 +21,7 @@
 #include <math.h>
 #include "timing.h"
 #include "window_gl.h"
-#include "Kernel.h"
+#include "kernel.h"
 #include "bmp_output.h"
 
 static void DrawTexture();
@@ -301,21 +301,16 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
             ResizeImageBuffer();
         }
         break;
-    case 'r':
-        params.centerX = -0.5;
-        params.centerY = 0.0;
-        params.zoom = 1.0;
-        params.maxlen2 = 64.0;
-        params.startX = 0.0;
-        params.startY = 0.0;
-        params.iter = 256;
-        params.exponent = 2.0;
+    case 'r': { // reset params
+        params = kernel_params();
         sqrtSamples = 1;
-        break;
+        ResizeImageBuffer();
+    } break;
     case 'p': {
         static char filename[64];
+        static uint32_t prefix = uint32_t(getTime() ^ (getTime() >> 32));
         static int fileCounter = 0;
-        snprintf(filename, sizeof(filename) - 1, "output_%d.bmp", fileCounter++);
+        snprintf(filename, sizeof(filename) - 1, "output_%d_%d.bmp", prefix, fileCounter++);
         WriteImageToDisk(filename);
     } break;
     }
