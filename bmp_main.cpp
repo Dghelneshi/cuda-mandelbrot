@@ -1,36 +1,38 @@
-/*
- *	calls bmp_output's print_bmp with the cuda generated data
- *
- */
-#define WIDTH 1920
-#define HEIGHT 1080
-
-#include "main.h"
 #include "kernel.h"
 #include "bmp_output.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include <cuda_runtime.h>
+#include "timing.h"
+#include <stdio.h>
 
+#define WIDTH 1920
+#define HEIGHT 1080
 #define BUFSIZE (WIDTH * HEIGHT * BYTESPERPIXEL)
 
-static double maxlen = 1024.0;
-static pos_t pos;
+int bmpMain() {
+    uint32_t* cpuBuffer; // image in CPU memory
+    uint32_t* gpuBuffer; // image in GPU memory
+    cpuBuffer = (uint32_t*) malloc(BUFSIZE);
+    cudaMalloc((void**)&gpuBuffer, BUFSIZE);
 
-int bmpMain(){
-				//this goes into bmp_output
-				uint32_t* memBuffer;				// image in memory
-				uint32_t* gpuBuffer;				// image in gpu memory
-				cudaMalloc( (void**)&gpuBuffer, BUFSIZE);	// allocate gpu buffer
-				launchKernel(gpuBuffer, WIDTH, HEIGHT, pos, maxlen);
-				memBuffer = (uint32_t*)malloc(BUFSIZE);		// allocate memory buffer
-				cudaMemcpy(
-						memBuffer,
-						gpuBuffer,
-						BUFSIZE,
-						cudaMemcpyDeviceToHost);	// copy the image from gpu into memory
+    kernel_params params;
+    params.image_buffer = gpuBuffer;
+    params.width  = WIDTH;
+    params.height = HEIGHT;
 
-				print_bmp ( WIDTH, HEIGHT, (char*)memBuffer );
-				
-				return EXIT_SUCCESS;
+    cudaTimer t = startCudaTimer();
+
+    LaunchKernel(params);
+
+    float time = stopCudaTimer(t);
+    printf("Generated image in %fms\n", time);
+
+    cudaMemcpy(cpuBuffer, gpuBuffer, BUFSIZE, cudaMemcpyDeviceToHost);
+    write_bmp("output.bmp", WIDTH, HEIGHT, (uint8_t*) cpuBuffer);
+
+    free(cpuBuffer);
+    cudaFree(gpuBuffer);
+
+    return 0;
 }

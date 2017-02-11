@@ -2,6 +2,7 @@
 #include "timing.h"
 
 #ifdef _WIN32
+
     #define WINDOWS_LEAN_AND_MEAN
     #define NOMINMAX
     #include <windows.h>
@@ -18,10 +19,13 @@
         return t1.QuadPart;
     }
 
+    // returns milliseconds
     float timeDelta(uint64_t start, uint64_t stop) {
         return float(((stop - start) * 1000) / (double) timerFreq.QuadPart);
     }
+
 #else
+
     #include <time.h>
 
     void initTime() {}
@@ -32,9 +36,11 @@
         return (uint64_t) ts.tv_nsec + (uint64_t) ts.tv_sec * 1000000000ull;
     }
 
+    // returns milliseconds
     float timeDelta(uint64_t start, uint64_t stop) {
         return ((stop - start) / 1000000.0);
     }
+
 #endif
 
 cudaTimer startCudaTimer() {
@@ -45,7 +51,7 @@ cudaTimer startCudaTimer() {
     return t;
 }
 
-// blocks until gpu is finished
+// blocks until gpu is finished, returns milliseconds
 float stopCudaTimer(cudaTimer t) {
     float result = 0.0f;
     cudaEventRecord(t.stop);
