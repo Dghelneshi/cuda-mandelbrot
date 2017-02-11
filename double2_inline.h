@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vector_types.h>
+#include <host_defines.h>
+
 // operators & functions for double2
 
 inline __host__ __device__ double dot(double2 a, double2 b)

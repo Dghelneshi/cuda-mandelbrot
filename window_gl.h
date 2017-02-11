@@ -1,3 +1,3 @@
 #pragma once
 
-bool initGLWindow(int argc, const char *argv[]);
+bool InitGLWindow(int argc, const char *argv[]);

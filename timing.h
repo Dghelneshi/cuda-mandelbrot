@@ -10,7 +10,7 @@ struct cudaTimer {
 
 void initTime();
 uint64_t getTime();
-float timeDelta(uint64_t start, uint64_t stop);
+float timeDelta(uint64_t start, uint64_t stop); // returns milliseconds
 
 cudaTimer startCudaTimer();
-float stopCudaTimer(cudaTimer t); // blocks until gpu is finished
+float stopCudaTimer(cudaTimer t); // blocks until gpu is finished, returns milliseconds
