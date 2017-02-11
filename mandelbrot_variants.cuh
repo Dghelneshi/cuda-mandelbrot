@@ -1,10 +1,14 @@
 #include <vector_functions.h>
-#include <device_functions.h>
-#include <math_functions.h>
 #include "helper_math.h"
 #include "double2_inline.h"
 
 // NOTE: changes in this file will not automatically trigger a rebuild in Visual Studio!
+
+// Experiment results:
+// 1. complex<T>/vec2<T> datastructures are slower than any other method
+// 2. float2/double2 are faster than any other method
+// 3. individual floats/doubles are just slightly slower than float2/double2
+// 4. it's either impossible or at least extremely ugly to "typedef" a vec2<T> as float2 and double2 respectively
 
 template<typename T>
 struct vec2 {
@@ -20,7 +24,6 @@ struct vec2 {
     __device__ vec2 operator+(vec2 b) {
         return vec2(x + b.x, y + b.y);
     }
-
 };
 
 template<typename T>
@@ -47,8 +50,9 @@ static __device__ T MandelbrotFullGeneric(T x, T y, T maxlen2, T startX, T start
     vec2<T> z(startX, startY);
     vec2<T> dz((T)0.0, (T)0.0); // derivative z'
     T len2;
-    
-    for (int i = 0; i < iter; i++) {
+
+    int i;
+    for (i = 0; i < iter; i++) {
         // z' = e * z^(e-1) * z' + 1
         vec2<T> chain = e * cpow(z, e - (T)1.0);
         dz = vec2<T>(chain.x*dz.x - chain.y*dz.y, chain.x*dz.y + chain.y*dz.x) + vec2<T>((T)1.0, (T)0.0);
@@ -63,10 +67,11 @@ static __device__ T MandelbrotFullGeneric(T x, T y, T maxlen2, T startX, T start
 
     // distance	estimation
     // d(c) = |z|*log|z|/|z'|
+    // NOTE: log(sqrt(x)) = 0.5 * log(x)
     T dzlen2 = dz.x*dz.x + dz.y*dz.y;
     T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
 
-    return d;
+    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
 template<typename T>
@@ -80,7 +85,8 @@ static __device__ T MandelbrotSquareGeneric(T x, T y, T maxlen2, T startX, T sta
     T dzy = (T)0.0;
     T len2 = (T)0.0;
 
-    for (int i = 0; i < iter; i++) {
+    int i;
+    for (i = 0; i < iter; i++) {
         // z' = 2*z*z' + 1
         T dzx_ = dzx;
         dzx = (T)2.0 * (zx*dzx - zy*dzy) + (T)1.0;
@@ -100,8 +106,8 @@ static __device__ T MandelbrotSquareGeneric(T x, T y, T maxlen2, T startX, T sta
     // d(c) = |z|*log|z|/|z'|
     T dzlen2 = dzx*dzx + dzy*dzy;
     T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
-
-    return d;
+    
+    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
 static __device__ double MandelbrotSquareDouble(double x, double y, double maxlen2, double startX, double startY, int iter) {
@@ -111,7 +117,8 @@ static __device__ double MandelbrotSquareDouble(double x, double y, double maxle
     double2 dz = make_double2(0.0, 0.0); // derivative z'
     double len2 = 0.0;
 
-    for (int i = 0; i < iter; i++) {
+    int i;
+    for (i = 0; i < iter; i++) {
 
         // z' = 2*z*z' + 1
         dz = 2.0 * make_double2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x) + make_double2(1.0, 0.0);
@@ -129,7 +136,7 @@ static __device__ double MandelbrotSquareDouble(double x, double y, double maxle
     // d(c) = |z|*log|z|/|z'|
     double d = 0.5 * sqrt(len2 / dot(dz, dz)) * log(len2);
 
-    return d;
+    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
 static __device__ float MandelbrotSquareFloat(float x, float y, float maxlen2, float startX, float startY, int iter) {
@@ -139,7 +146,8 @@ static __device__ float MandelbrotSquareFloat(float x, float y, float maxlen2, f
     float2 dz = make_float2(0.0f, 0.0f); // derivative z'
     float len2 = 0.0f;
 
-    for (int i = 0; i < iter; i++) {
+    int i;
+    for (i = 0; i < iter; i++) {
 
         // z' = 2*z*z' + 1
         dz = 2.0f * make_float2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x) + make_float2(1.0f, 0.0f);
@@ -157,7 +165,7 @@ static __device__ float MandelbrotSquareFloat(float x, float y, float maxlen2, f
     // d(c) = |z|*log|z|/|z'|
     float d = 0.5f * sqrt(len2 / dot(dz, dz)) * log(len2);
 
-    return d;
+    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
 static __device__ double MandelbrotCubeDouble(double x, double y, double maxlen2, double startX, double startY, int iter) {
@@ -168,7 +176,8 @@ static __device__ double MandelbrotCubeDouble(double x, double y, double maxlen2
     double2 z2;
     double len2 = 0.0;
 
-    for (int i = 0; i < iter; i++) {
+    int i;
+    for (i = 0; i < iter; i++) {
 
         // z' = 3 * z^2 * z' + 1
         z2 = make_double2(z.x*z.x - z.y*z.y, 2.0f*z.x*z.y);
@@ -187,7 +196,7 @@ static __device__ double MandelbrotCubeDouble(double x, double y, double maxlen2
     // d(c) = |z|*log|z|/|z'|
     double d = 0.5 * sqrt(len2 / dot(dz, dz)) * log(len2);
 
-    return d;
+    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
 
@@ -200,7 +209,8 @@ static __device__ float MandelbrotCubeFloat(float x, float y, float maxlen2, flo
     float2 z2; // z^2
     float len2 = 0.0;
 
-    for (int i = 0; i < iter; i++) {
+    int i;
+    for (i = 0; i < iter; i++) {
 
         // z' = 3*z^2*z' + 1
         z2 = make_float2(z.x*z.x - z.y*z.y, 2.0f*z.x*z.y);
@@ -219,7 +229,7 @@ static __device__ float MandelbrotCubeFloat(float x, float y, float maxlen2, flo
     // d(c) = |z|*log|z|/|z'|
     float d = 0.5 * sqrt(len2 / dot(dz, dz)) * log(len2);
 
-    return d;
+    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
 
