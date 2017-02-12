@@ -10,6 +10,7 @@
 // 3. individual floats/doubles are just slightly slower than float2/double2
 // 4. it's either impossible or at least extremely ugly to "typedef" a vec2<T> as float2 and double2 respectively
 
+// small vector class to help with full generic version
 template<typename T>
 struct vec2 {
     T x;
@@ -31,20 +32,32 @@ __device__ static T length(vec2<T> v) {
     return sqrt(v.x * v.x + v.y * v.y);
 }
 
-// complex power function
+// complex power function (real exponent)
+// c = x + iy
+// c = e ^ (log(r) + i*theta)      [Cartesian to polar coordinates]
+// log(c) = log(r) + i*theta
+// r = sqrt(x^2 + y^2)
+// theta = atan2(y,x))
+// c^n = e ^ (n * log(c))
+//     = e ^ (n * (log(r) + i*theta))
+//     = e^(n*log(r)) * e^(n*i*theta)
+//     = e^(n*log(r)) * (cos(n*theta) + i*sin(n*theta))   [polar to Cartesian]
 template<typename T>
 __device__ static vec2<T> cpow(vec2<T> c, T exponent)
 {
     T cAbs = length(c);
-    vec2<T> cLog = vec2<T>(log(cAbs), atan2(c.y, c.x + (T)1e-5));
+    vec2<T> cLog = vec2<T>(log(cAbs), atan2(c.y, c.x));
     vec2<T> cMul = exponent*cLog;
     T expReal = exp(cMul.x);
     return vec2<T>(expReal*cos(cMul.y), expReal*sin(cMul.y));
 }
 
 
+// Generic Mandelbrot with arbitrary exponent
+// returns distance estimation
+// z = z^n + c
 template<typename T>
-static __device__ T MandelbrotFullGeneric(T x, T y, T maxlen2, T startX, T startY, int iter, T e) {
+static __device__ T MandelbrotFullGeneric(T x, T y, T maxlen2, T startX, T startY, int iter, T n) {
 
     vec2<T> c(x,y);
     vec2<T> z(startX, startY);
@@ -53,12 +66,13 @@ static __device__ T MandelbrotFullGeneric(T x, T y, T maxlen2, T startX, T start
 
     int i;
     for (i = 0; i < iter; i++) {
-        // z' = e * z^(e-1) * z' + 1
-        vec2<T> chain = e * cpow(z, e - (T)1.0);
-        dz = vec2<T>(chain.x*dz.x - chain.y*dz.y, chain.x*dz.y + chain.y*dz.x) + vec2<T>((T)1.0, (T)0.0);
 
-        // z = z^e + c
-        z = cpow(z, e) + c;
+        // z' = n * z^(n-1) * z' + 1
+        vec2<T> chain = n * cpow(z, n - (T)1.0);
+        dz = vec2<T>(chain.x*dz.x - chain.y*dz.y + 1.0, chain.x*dz.y + chain.y*dz.x);
+
+        // z = z^n + c
+        z = cpow(z, n) + c;
 
         len2 = z.x*z.x + z.y*z.y;
         // if z is too far from the origin, assume divergence
@@ -67,13 +81,17 @@ static __device__ T MandelbrotFullGeneric(T x, T y, T maxlen2, T startX, T start
 
     // distance	estimation
     // d(c) = |z|*log|z|/|z'|
-    // NOTE: log(sqrt(x)) = 0.5 * log(x)
+    // log(sqrt(r)) = 0.5 * log(r)
     T dzlen2 = dz.x*dz.x + dz.y*dz.y;
     T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
 
     return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
+
+// Generic Mandelbrot with exponent = 2
+// returns distance estimation
+// z = z^2 + c
 template<typename T>
 static __device__ T MandelbrotSquareGeneric(T x, T y, T maxlen2, T startX, T startY, int iter) {
 
@@ -110,6 +128,9 @@ static __device__ T MandelbrotSquareGeneric(T x, T y, T maxlen2, T startX, T sta
     return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
+// double precision Mandelbrot with exponent = 2
+// returns distance estimation
+// z = z^2 + c
 static __device__ double MandelbrotSquareDouble(double x, double y, double maxlen2, double startX, double startY, int iter) {
 
     double2 c = make_double2(x, y);
@@ -139,6 +160,9 @@ static __device__ double MandelbrotSquareDouble(double x, double y, double maxle
     return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
+// single precision Mandelbrot with exponent = 2
+// returns distance estimation
+// z = z^2 + c
 static __device__ float MandelbrotSquareFloat(float x, float y, float maxlen2, float startX, float startY, int iter) {
 
     float2 c = make_float2(x, y);
@@ -168,6 +192,9 @@ static __device__ float MandelbrotSquareFloat(float x, float y, float maxlen2, f
     return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
+// double precision Mandelbrot with exponent = 3
+// returns distance estimation
+// z = z^3 + c
 static __device__ double MandelbrotCubeDouble(double x, double y, double maxlen2, double startX, double startY, int iter) {
 
     double2 c = make_double2(x, y);
@@ -200,7 +227,9 @@ static __device__ double MandelbrotCubeDouble(double x, double y, double maxlen2
 }
 
 
-
+// single precision Mandelbrot with exponent = 3
+// returns distance estimation
+// z = z^3 + c
 static __device__ float MandelbrotCubeFloat(float x, float y, float maxlen2, float startX, float startY, int iter) {
 
     float2 c = make_float2(x, y);
@@ -244,6 +273,7 @@ enum cm_variants {
 };
 
 // This template function is essentially a compile-time switch statement for the different mandelbrot variants
+// Note that partial specialization of functions is not supported by C++, so we need to instantiate the float/double variants explicitly.
 
 template<typename T, cm_variants V>
 __device__ __forceinline__ T Mandelbrot(T x, T y, T maxlen2, T startX, T startY, int iter, T exponent);
