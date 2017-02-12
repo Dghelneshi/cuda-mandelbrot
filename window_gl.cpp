@@ -3,9 +3,13 @@
 #ifdef _WIN32
     #define WINDOWS_LEAN_AND_MEAN
     #define NOMINMAX
-    #define _CRT_SECURE_NO_WARNINGS
     #include <windows.h>
-    #define snprintf sprintf_s
+    #if _MSC_VER
+        #define _CRT_SECURE_NO_WARNINGS
+        #define snprintf sprintf_s
+        #define fprintf fprintf_s
+        #define fscanf fscanf_s
+    #endif
 #else
     #define VK_ESCAPE 27
 #endif
@@ -16,9 +20,12 @@
 #include <cuda_gl_interop.h>
 
 #include <cuda_runtime.h>
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
+
 #include "timing.h"
 #include "window_gl.h"
 #include "kernel.h"
@@ -62,7 +69,7 @@ static void Display() {
     float gpu_time = stopCudaTimer(t);
 
     // copy the data from the PBO into our result texture
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo); 
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
     glBindTexture(GL_TEXTURE_2D, result_texture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, params.width, params.height, CM_IMAGE_FORMAT, GL_UNSIGNED_BYTE, NULL);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
@@ -112,35 +119,6 @@ static void DrawTexture() {
     glDisable(GL_TEXTURE_2D);
 }
 
-static void WriteImageToDisk(const char* filename, bool writeLargeImage = false) {
-    uint32_t bufferSize;
-    uint32_t *cpuBuffer;
-    int result;
-
-    if (writeLargeImage) {
-        // writes the entire image buffer to disk, possibly hundreds of MB!
-        bufferSize = params.width * params.height * sizeof(*image_buffer);
-        cpuBuffer = (uint32_t*) malloc(bufferSize);
-        cudaGLMapBufferObject((void**) &image_buffer, pbo);
-        cudaMemcpy(cpuBuffer, image_buffer, bufferSize, cudaMemcpyDeviceToHost);
-        cudaGLUnmapBufferObject(pbo);
-        result = write_bmp(filename, params.width, params.height, (uint8_t*) cpuBuffer);
-    }
-    else {
-        // writes the window contents to disk
-        bufferSize = window_width * window_height * sizeof(*image_buffer);
-        cpuBuffer = (uint32_t*) malloc(bufferSize);
-        glReadPixels(0, 0, window_width, window_height, GL_BGRA, GL_UNSIGNED_BYTE, cpuBuffer);
-        result = write_bmp(filename, window_width, window_height, (uint8_t*) cpuBuffer);
-    }
-
-    free(cpuBuffer);
-    if (result == 0) {
-        printf("Wrote image to %s\n", filename);
-    }
-}
-
-
 // initialize the PBO and texture for transferring data from CUDA to OpenGL
 static void InitGLBuffers() {
 
@@ -185,6 +163,123 @@ static void WindowResizeCallback(int width, int height) {
 
     ResizeImageBuffer();
 }
+
+
+static void WriteImageToDisk(const char* filename, bool writeLargeImage = false) {
+    uint32_t bufferSize;
+    uint32_t *cpuBuffer;
+    int result;
+
+    if (writeLargeImage) {
+        // writes the entire image buffer to disk, possibly hundreds of MB!
+        bufferSize = params.width * params.height * sizeof(*image_buffer);
+        cpuBuffer = (uint32_t*) malloc(bufferSize);
+        cudaGLMapBufferObject((void**) &image_buffer, pbo);
+        cudaMemcpy(cpuBuffer, image_buffer, bufferSize, cudaMemcpyDeviceToHost);
+        cudaGLUnmapBufferObject(pbo);
+        result = write_bmp(filename, params.width, params.height, (uint8_t*) cpuBuffer);
+    }
+    else {
+        // writes the window contents to disk
+        bufferSize = window_width * window_height * sizeof(*image_buffer);
+        cpuBuffer = (uint32_t*) malloc(bufferSize);
+        glReadPixels(0, 0, window_width, window_height, GL_BGRA, GL_UNSIGNED_BYTE, cpuBuffer);
+        result = write_bmp(filename, window_width, window_height, (uint8_t*) cpuBuffer);
+    }
+
+    free(cpuBuffer);
+    if (result == 0) {
+        printf("Wrote image to %s\n", filename);
+    }
+}
+
+static void WriteParamsToDisk(const char* filename, const kernel_params& params, uint32_t sqrtSamples) {
+    FILE* f = fopen(filename, "w");
+    if (!f) return;
+    
+    fprintf(f, "-w %u -h %u -i %d -x %.17g -y %.17g -z %.17g -b %.17g -sx %.17g -sy %.17g -e %.17g -spp %u",
+            params.width, params.height, params.iter, params.centerX, params.centerY, params.zoom,
+            params.maxlen2, params.startX, params.startY, params.exponent, sqrtSamples * sqrtSamples);
+
+    fclose(f);
+    printf("Wrote parameters to %s\n", filename);
+}
+
+
+static boolean ReadParamsFromDisk(const char* filename, kernel_params* out_p, uint32_t *sqrtSamples) {
+    
+    kernel_params p = kernel_params(); // set standard values
+    uint32_t spp = 1;
+
+    FILE* f = fopen(filename, "r");
+    if (!f) return false;
+
+    static char buf[1024];
+    char* res = fgets(buf, sizeof(buf) - 1, f);
+    if (!res) {
+        fclose(f);
+        return false;
+    }
+    
+    while (*res) {
+        
+        while (*res != '-') ++res;
+
+        if (strncmp(res, "-w ", 3) == 0) {
+            res += 3;
+            p.width = strtoul(res, &res, 0);
+        }
+        else if (strncmp(res, "-h ", 3) == 0) {
+            res += 3;
+            p.height = strtoul(res, &res, 0);
+        }
+        else if (strncmp(res, "-i ", 3) == 0) {
+            res += 3;
+            p.iter = strtol(res, &res, 0);
+        }
+        else if (strncmp(res, "-x ", 3) == 0) {
+            res += 3;
+            p.centerX = strtod(res, &res);
+        }
+        else if (strncmp(res, "-y ", 3) == 0) {
+            res += 3;
+            p.centerY = strtod(res, &res);
+        }
+        else if (strncmp(res, "-z ", 3) == 0) {
+            res += 3;
+            p.zoom = strtod(res, &res);
+        }
+        else if (strncmp(res, "-b ", 3) == 0) {
+            res += 3;
+            p.maxlen2 = strtod(res, &res);
+        }
+        else if (strncmp(res, "-sx ", 4) == 0) {
+            res += 4;
+            p.startX = strtod(res, &res);
+        }
+        else if (strncmp(res, "-sy ", 4) == 0) {
+            res += 4;
+            p.startY = strtod(res, &res);
+        }
+        else if (strncmp(res, "-e ", 3) == 0) {
+            res += 3;
+            p.exponent = strtod(res, &res);
+        }
+        else if (strncmp(res, "-spp ", 5) == 0) {
+            res += 5;
+            spp = strtoul(res, &res, 0);
+        }
+    }
+    
+    *sqrtSamples = (uint32_t) (sqrt((float)spp) + 0.5f);
+    *out_p = p;
+
+    printf("Read parameters from %s\n", filename);
+    fclose(f);
+    return true;
+}
+
+
 
 ///////////
 // INPUT //
@@ -238,55 +333,73 @@ static void MouseWheelCallback(int wheel, int direction, int x, int y) {
 static void KeyboardCallback(unsigned char key, int x, int y) {
 
     switch (key) {
-    case VK_ESCAPE:
-        glutLeaveMainLoop(); // exit
+
+    case VK_ESCAPE: // exit
+        glutLeaveMainLoop();
         break;
-    case 'e':
+
+    case 'e': // zoom out
     case '-':
         params.zoom *= zoomSpeed;
         break;
-    case 'q':
+    case 'q': // zoom in
     case '+':
         params.zoom *= 1.0 / zoomSpeed;
         break;
-    case 'w':
+
+    case 'w': // move start up
         params.startY += startModSpeed * params.zoom;
         break;
-    case 's':
+    case 's': // move start down
         params.startY -= startModSpeed * params.zoom;
         break;
-    case 'a':
+
+    case 'a': // move start left
         params.startX -= startModSpeed * params.zoom;
         break;
-    case 'd':
+    case 'd': // move start right
         params.startX += startModSpeed * params.zoom;
         break;
-    case 'c':
+
+    case 'c': // decrease bailout radius
         params.maxlen2 *= 1.0 / zoomSpeed;
         break;
-    case 'v':
+    case 'v': // increase bailout radius
         params.maxlen2 *= zoomSpeed;
         break;
-    case ',':
+
+    case ',': // decrease exponent
         params.exponent -= 0.01 * params.zoom;
         break;
-    case '.':
+    case '.': // increase exponent
         params.exponent += 0.01 * params.zoom;
         break;
-    case 'k':
+
+    case 'k': // decrease zoom speed
         zoomSpeed -= 0.01;
+        zoomSpeed = fmax(zoomSpeed, 1.01);
         break;
-    case 'l':
+    case 'l': // increase zoom speed
         zoomSpeed += 0.01;
+        zoomSpeed = fmax(zoomSpeed, 1.01);
         break;
-    case 'f':
-        params.iter *= 1.0 / zoomSpeed;
+
+    case 'f': // decrease iterations
+        params.iter = (int)(params.iter * 1.0 / zoomSpeed);
         if (params.iter == 0) params.iter = 1;
         break;
-    case 'g':
-        params.iter = ceil(params.iter * zoomSpeed);
+    case 'g': // increase iterations
+        params.iter = (int) ceil(params.iter * zoomSpeed);
         break;
-    case 'n': {
+
+    case 'b': // decrease samples per pixel
+        if (sqrtSamples > 1) {
+            sqrtSamples >>= 1;
+            ResizeImageBuffer();
+        }
+        break;
+
+    case 'n': { // increase samples per pixel
         uint32_t newSpp = sqrtSamples << 1;
         if (((window_width  * newSpp) < (uint32_t) maxTextureSize) &&
             ((window_height * newSpp) < (uint32_t) maxTextureSize)) {
@@ -295,26 +408,34 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
             ResizeImageBuffer();
         }
     } break;
-    case 'b':
-        if (sqrtSamples > 1) {
-            sqrtSamples >>= 1;
-            ResizeImageBuffer();
-        }
-        break;
+
     case 'r': { // reset params
         params = kernel_params();
         sqrtSamples = 1;
         ResizeImageBuffer();
     } break;
-    case 'p': {
+
+    case 'p': { // write image and parameters to disk
         static char filename[64];
         static uint32_t prefix = uint32_t(getTime() ^ (getTime() >> 32));
-        static int fileCounter = 0;
-        snprintf(filename, sizeof(filename) - 1, "output_%d_%d.bmp", prefix, fileCounter++);
+        static uint32_t fileCounter = 0;
+        int len = snprintf(filename, sizeof(filename) - 1, "output_%u_%u.bmp", prefix, fileCounter++);
         WriteImageToDisk(filename);
+
+        // replace ".bmp" with ".par"
+        assert(len < sizeof(filename));
+        filename[len - 3] = 'p';
+        filename[len - 2] = 'a';
+        filename[len - 1] = 'r';
+        WriteParamsToDisk(filename, params, sqrtSamples);
+    } break;
+
+    case 'i': { // read parameters from disk
+        if (ReadParamsFromDisk("input.par", &params, &sqrtSamples)) {
+            ResizeImageBuffer();
+        }
     } break;
     }
-    zoomSpeed = fmax(zoomSpeed, 1.01);
 }
 
 static void APIENTRY PrintDebugMessage(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, GLvoid* userParam) {
@@ -361,12 +482,12 @@ bool InitGLWindow(int argc, const char *argv[]) {
 
     // register debug callback (either OpenGL 4.3 or GL_ARB_debug_output is required)
     if (glewIsSupported("GL_VERSION_4_3")) {
-        glDebugMessageCallback((GLDEBUGPROC) printDebugMessage, NULL);
+        glDebugMessageCallback((GLDEBUGPROC) PrintDebugMessage, NULL);
         // set debug output to be called in the same thread so we can set a breakpoint
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
     }
     else if (glewIsSupported("GL_ARB_debug_output")) {
-        glDebugMessageCallbackARB((GLDEBUGPROC) printDebugMessage, NULL);
+        glDebugMessageCallbackARB((GLDEBUGPROC) PrintDebugMessage, NULL);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
     }
 #endif

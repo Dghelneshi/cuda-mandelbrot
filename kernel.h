@@ -32,5 +32,5 @@ struct kernel_params {
 };
 
 extern "C" {
-    void LaunchKernel(kernel_params p);
+    void LaunchKernel(const kernel_params &p);
 }

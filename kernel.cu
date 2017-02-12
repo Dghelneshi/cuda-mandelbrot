@@ -12,8 +12,8 @@
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-
 #include <math_functions.h>
+
 #include "kernel.h"
 #include "float.h"
 #include "mandelbrot_variants.cuh"
@@ -117,20 +117,22 @@ __global__ void TemplateKernel(uint32_t *image_buffer, uint32_t w, uint32_t h, T
 
 extern "C" {
 
-    void LaunchKernel(kernel_params p) {
+    void LaunchKernel(const kernel_params &p) {
         dim3 block(BLOCK_SIZE_X, BLOCK_SIZE_Y, 1);
         dim3 grid((p.width + block.x - 1) / block.x, (p.height + block.y - 1) / block.y, 1);
         
+        // TODO: no-autoswitch parameter
+
         // choose double or float arithmetic according to the mandelbrot coordinate difference between pixels
         double pixelSize = 2.0 * (p.zoom / p.height);
         double threshold = FLT_EPSILON * 4.0; // computing the threshold exactly is a pain, this is a fine approximation
         
         if (pixelSize > threshold) {
-            TemplateKernel<float, SQR_GENERIC> << <grid, block >> >(p.image_buffer, p.width, p.height, p.centerX, p.centerY, p.zoom, p.maxlen2, p.startX, p.startY, p.iter, p.exponent);
+            TemplateKernel<float, SQR_FULL_GENERIC> << <grid, block >> >(p.image_buffer, p.width, p.height, p.centerX, p.centerY, p.zoom, p.maxlen2, p.startX, p.startY, p.iter, p.exponent);
             //SwitchKernel<float> << <grid, block >> >(SQR_GENERIC, p.image_buffer, p.width, p.height, p.centerX, p.centerY, p.zoom, p.maxlen2, p.startX, p.startY, p.iter, p.exponent);
         }
         else {
-            TemplateKernel<double, SQR_GENERIC> << <grid, block >> >(p.image_buffer, p.width, p.height, p.centerX, p.centerY, p.zoom, p.maxlen2, p.startX, p.startY, p.iter, p.exponent);
+            TemplateKernel<double, SQR_FULL_GENERIC> << <grid, block >> >(p.image_buffer, p.width, p.height, p.centerX, p.centerY, p.zoom, p.maxlen2, p.startX, p.startY, p.iter, p.exponent);
             //SwitchKernel<double> << <grid, block >> >(SQR_GENERIC, p.image_buffer, p.width, p.height, p.centerX, p.centerY, p.zoom, p.maxlen2, p.startX, p.startY, p.iter, p.exponent);
         }
     }
