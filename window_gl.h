@@ -1,3 +1,4 @@
 #pragma once
+#include "kernel.h"
 
-bool InitGLWindow(int argc, const char *argv[]);
+void GLWindowMain(int argc, char *argv[], const kernel_params &p);

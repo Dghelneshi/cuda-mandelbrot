@@ -1,4 +1,5 @@
 #pragma once
+#include "kernel.h"
 
-int bmpMain();
+int bmpMain(const char* filename, kernel_params &params);
 

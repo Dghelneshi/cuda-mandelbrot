@@ -1,9 +1,6 @@
 #ifndef CM_NOGL
 
 #ifdef _WIN32
-    #define WINDOWS_LEAN_AND_MEAN
-    #define NOMINMAX
-    #include <windows.h>
     #if _MSC_VER
         #define _CRT_SECURE_NO_WARNINGS
         #define snprintf sprintf_s
@@ -29,6 +26,7 @@
 #include "timing.h"
 #include "window_gl.h"
 #include "kernel.h"
+#include "cmdline_parser.h"
 #include "bmp_output.h"
 
 static void DrawTexture();
@@ -40,9 +38,8 @@ static uint32_t* image_buffer; // this is the actual memory pointer to the PBO
 
 // Window & Image
 #define CM_IMAGE_FORMAT GL_BGRA
-static uint32_t window_width  = 1200;
-static uint32_t window_height = 800;
-static uint32_t sqrtSamples   = 1;
+static uint32_t window_width  = 1280;
+static uint32_t window_height = 720;
 static GLint    maxTextureSize;
 
 // Mandelbrot kernel parameters
@@ -147,8 +144,8 @@ static void InitGLBuffers() {
 
 // delete and recreate buffer
 static void ResizeImageBuffer() {
-    params.width  = window_width  * sqrtSamples;
-    params.height = window_height * sqrtSamples;
+    params.width  = window_width  * params.sqrtSamples;
+    params.height = window_height * params.sqrtSamples;
     cudaGLUnregisterBufferObject(pbo);
     glDeleteBuffers(1, &pbo);
     glDeleteTextures(1, &result_texture);
@@ -193,93 +190,6 @@ static void WriteImageToDisk(const char* filename, bool writeLargeImage = false)
     }
 }
 
-static void WriteParamsToDisk(const char* filename, const kernel_params& params, uint32_t sqrtSamples) {
-    FILE* f = fopen(filename, "w");
-    if (!f) return;
-    
-    fprintf(f, "-w %u -h %u -i %d -x %.17g -y %.17g -z %.17g -b %.17g -sx %.17g -sy %.17g -e %.17g -spp %u",
-            params.width, params.height, params.iter, params.centerX, params.centerY, params.zoom,
-            params.maxlen2, params.startX, params.startY, params.exponent, sqrtSamples * sqrtSamples);
-
-    fclose(f);
-    printf("Wrote parameters to %s\n", filename);
-}
-
-
-static boolean ReadParamsFromDisk(const char* filename, kernel_params* out_p, uint32_t *sqrtSamples) {
-    
-    kernel_params p = kernel_params(); // set standard values
-    uint32_t spp = 1;
-
-    FILE* f = fopen(filename, "r");
-    if (!f) return false;
-
-    static char buf[1024];
-    char* res = fgets(buf, sizeof(buf) - 1, f);
-    if (!res) {
-        fclose(f);
-        return false;
-    }
-    
-    while (*res) {
-        
-        while (*res != '-') ++res;
-
-        if (strncmp(res, "-w ", 3) == 0) {
-            res += 3;
-            p.width = strtoul(res, &res, 0);
-        }
-        else if (strncmp(res, "-h ", 3) == 0) {
-            res += 3;
-            p.height = strtoul(res, &res, 0);
-        }
-        else if (strncmp(res, "-i ", 3) == 0) {
-            res += 3;
-            p.iter = strtol(res, &res, 0);
-        }
-        else if (strncmp(res, "-x ", 3) == 0) {
-            res += 3;
-            p.centerX = strtod(res, &res);
-        }
-        else if (strncmp(res, "-y ", 3) == 0) {
-            res += 3;
-            p.centerY = strtod(res, &res);
-        }
-        else if (strncmp(res, "-z ", 3) == 0) {
-            res += 3;
-            p.zoom = strtod(res, &res);
-        }
-        else if (strncmp(res, "-b ", 3) == 0) {
-            res += 3;
-            p.maxlen2 = strtod(res, &res);
-        }
-        else if (strncmp(res, "-sx ", 4) == 0) {
-            res += 4;
-            p.startX = strtod(res, &res);
-        }
-        else if (strncmp(res, "-sy ", 4) == 0) {
-            res += 4;
-            p.startY = strtod(res, &res);
-        }
-        else if (strncmp(res, "-e ", 3) == 0) {
-            res += 3;
-            p.exponent = strtod(res, &res);
-        }
-        else if (strncmp(res, "-spp ", 5) == 0) {
-            res += 5;
-            spp = strtoul(res, &res, 0);
-        }
-    }
-    
-    *sqrtSamples = (uint32_t) (sqrt((float)spp) + 0.5f);
-    *out_p = p;
-
-    printf("Read parameters from %s\n", filename);
-    fclose(f);
-    return true;
-}
-
-
 
 ///////////
 // INPUT //
@@ -287,8 +197,8 @@ static boolean ReadParamsFromDisk(const char* filename, kernel_params* out_p, ui
 
 static double zoomSpeed = 1.1;
 static double startModSpeed = 0.025;
-static boolean lmbState = GLUT_UP;
-static boolean rmbState = GLUT_UP;
+static int lmbState = GLUT_UP;
+static int rmbState = GLUT_UP;
 static int lastX; // last mouse X position
 static int lastY; // last mouse Y position
 
@@ -303,8 +213,8 @@ static void MouseDragCallback(int x, int y) {
         params.centerY += (y - lastY) * scale;
     }
     if (rmbState == GLUT_DOWN) {
-        params.startX += (x - lastX) * scale;
-        params.startY -= (y - lastY) * scale;
+        params.z0_x += (x - lastX) * scale;
+        params.z0_y -= (y - lastY) * scale;
     }
     lastX = x;
     lastY = y;
@@ -332,10 +242,50 @@ static void MouseWheelCallback(int wheel, int direction, int x, int y) {
 
 static void KeyboardCallback(unsigned char key, int x, int y) {
 
+    int mod = glutGetModifiers();
+    bool ctrlPressed = ((mod & GLUT_ACTIVE_CTRL) != 0);
+
+    if (ctrlPressed) {
+        // GLUT is really old. CTRL key modifies the ASCII key code by setting bits 5 and 6 to 0
+        // See https://en.wikipedia.org/wiki/Control_key#History
+        
+        // NOTE: This only works for letters and also converts all of them to lower case.
+        //       If I needed more accurate input I would not use GLUT at all.
+        key = key | 0x60;
+    }
+
     switch (key) {
 
     case VK_ESCAPE: // exit
         glutLeaveMainLoop();
+        break;
+
+    // switch mandelbrot type
+    case '1':
+        params.type = CM_SQR_GENERIC;
+        break;
+    case '2':
+        params.type = CM_CUBE_GENERIC;
+        break;
+    case '3':
+        params.type = CM_FULL_GENERIC;
+        break;
+    case '4':
+        params.type = CM_BURNING_SHIP_GENERIC;
+        break;
+
+    // switch coloring type
+    case '6':
+        params.color = CM_ITER_BLACK_BROWN_BLUE;
+        break;
+    case '7':
+        params.color = CM_DIST_SNOWFLAKE;
+        break;
+    case '8':
+        params.color = CM_DIST_GREEN_BLUE;
+        break;
+    case '9':
+        params.color = CM_DIST_BLACK_BROWN_BLUE;
         break;
 
     case 'e': // zoom out
@@ -348,24 +298,24 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
         break;
 
     case 'w': // move start up
-        params.startY += startModSpeed * params.zoom;
+        params.z0_y += startModSpeed * params.zoom;
         break;
     case 's': // move start down
-        params.startY -= startModSpeed * params.zoom;
+        params.z0_y -= startModSpeed * params.zoom;
         break;
 
     case 'a': // move start left
-        params.startX -= startModSpeed * params.zoom;
+        params.z0_x -= startModSpeed * params.zoom;
         break;
     case 'd': // move start right
-        params.startX += startModSpeed * params.zoom;
+        params.z0_x += startModSpeed * params.zoom;
         break;
 
     case 'c': // decrease bailout radius
-        params.maxlen2 *= 1.0 / zoomSpeed;
+        params.bailout *= 1.0 / zoomSpeed;
         break;
     case 'v': // increase bailout radius
-        params.maxlen2 *= zoomSpeed;
+        params.bailout *= zoomSpeed;
         break;
 
     case ',': // decrease exponent
@@ -393,46 +343,51 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
         break;
 
     case 'b': // decrease samples per pixel
-        if (sqrtSamples > 1) {
-            sqrtSamples >>= 1;
+        if (params.sqrtSamples > 1) {
+            params.sqrtSamples >>= 1;
             ResizeImageBuffer();
         }
         break;
 
     case 'n': { // increase samples per pixel
-        uint32_t newSpp = sqrtSamples << 1;
+        uint32_t newSpp = params.sqrtSamples << 1;
         if (((window_width  * newSpp) < (uint32_t) maxTextureSize) &&
             ((window_height * newSpp) < (uint32_t) maxTextureSize)) {
 
-            sqrtSamples = newSpp;
+            params.sqrtSamples = newSpp;
             ResizeImageBuffer();
         }
     } break;
 
     case 'r': { // reset params
         params = kernel_params();
-        sqrtSamples = 1;
         ResizeImageBuffer();
     } break;
 
-    case 'p': { // write image and parameters to disk
+    case 'i': { // write image and parameters to disk
         static char filename[64];
         static uint32_t prefix = uint32_t(getTime() ^ (getTime() >> 32));
         static uint32_t fileCounter = 0;
         int len = snprintf(filename, sizeof(filename) - 1, "output_%u_%u.bmp", prefix, fileCounter++);
-        WriteImageToDisk(filename);
+
+        WriteImageToDisk(filename, ctrlPressed);
 
         // replace ".bmp" with ".par"
         assert(len < sizeof(filename));
         filename[len - 3] = 'p';
         filename[len - 2] = 'a';
         filename[len - 1] = 'r';
-        WriteParamsToDisk(filename, params, sqrtSamples);
+        WriteParamsToDisk(filename, params);
     } break;
 
-    case 'i': { // read parameters from disk
-        if (ReadParamsFromDisk("input.par", &params, &sqrtSamples)) {
-            ResizeImageBuffer();
+    case 'p': { // read or write parameters from/to disk
+        if (ctrlPressed) {
+            if (ReadParamsFromDisk("input.par", &params)) {
+                ResizeImageBuffer();
+            }            
+        }
+        else {
+            WriteParamsToDisk("input.par", params);
         }
     } break;
     }
@@ -442,7 +397,7 @@ static void APIENTRY PrintDebugMessage(GLenum source, GLenum type, GLuint id, GL
     printf("%s\n", message);
 }
 
-bool InitGLWindow(int argc, const char *argv[]) {
+void GLWindowMain(int argc, char *argv[], const kernel_params& p) {
 
     // create OpenGL context and window
 #if _DEBUG
@@ -457,13 +412,14 @@ bool InitGLWindow(int argc, const char *argv[]) {
     glewInit();
     if (!glewIsSupported("GL_VERSION_2_0 GL_ARB_pixel_buffer_object GL_EXT_framebuffer_object ")) {
         printf("ERROR: Support for necessary OpenGL extensions missing.");
-        return false;
+        return;
     }
 
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
 
-    params.width  = window_width  * sqrtSamples;
-    params.height = window_height * sqrtSamples;
+    params = p;
+    params.width  = window_width  * p.sqrtSamples;
+    params.height = window_height * p.sqrtSamples;
 
     InitGLBuffers();
 
@@ -492,7 +448,10 @@ bool InitGLWindow(int argc, const char *argv[]) {
     }
 #endif
 
-    return true;
+    cudaProfilerStart();
+
+    // start rendering main-loop
+    glutMainLoop();
 }
 
 #endif

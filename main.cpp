@@ -1,47 +1,40 @@
-// includes, OpenGL
-#ifndef CM_NOGL
-#include <GL/freeglut.h>
-#include "window_gl.h"
-#endif
-
 #include <cuda_runtime.h>
 #include <cuda_profiler_api.h>
-#include <stdio.h>
 
 #include "timing.h"
 #include "bmp_main.h"
+#include "kernel.h"
+#include "cmdline_parser.h"
 
-void Exit(int code) {
-    cudaProfilerStop();
-    cudaDeviceReset();
-    exit(code);
-}
+#ifndef CM_NOGL
+#include "window_gl.h"
+#endif
 
-int main(int argc, const char* argv[]) {
+
+int main(int argc, char* argv[]) {
 
     cudaProfilerStop();
     initTime();
 
-    // TODO: command line parser
+    kernel_params p;
+    bool useGL = false;
+    const char* outFile = nullptr;
 
-    if (argc > 1 && (strcmp(argv[1], "-gl") == 0)) {
+    parseArgs(argc, argv, &p, &useGL, outFile);
+    
+    if (useGL) {
         #ifdef CM_NOGL
             printf("Error: This executable was compiled without OpenGL support.");
         #else
-            if (!InitGLWindow(argc, argv))
-                return 1;
-
-            cudaProfilerStart();
-            // start rendering main-loop
-            glutMainLoop();
+            GLWindowMain(argc, argv, p);
         #endif
     }
     else {
-        cudaProfilerStart();
-        bmpMain();
+        bmpMain(outFile, p);
     }
 
-    Exit(0);
+    cudaProfilerStop();
+    cudaDeviceReset();
 
     return 0;
 }
