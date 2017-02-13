@@ -73,7 +73,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <GenerateLineInfo>true</GenerateLineInfo>
       <MaxRegCount>32</MaxRegCount>
       <PtxAsOptionV>true</PtxAsOptionV>
-      <FastMath>false</FastMath>
+      <FastMath>true</FastMath>
       <AdditionalCompilerOptions>
       </AdditionalCompilerOptions>
       <GenerateRelocatableDeviceCode>false</GenerateRelocatableDeviceCode>
@@ -109,7 +109,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <GenerateLineInfo>true</GenerateLineInfo>
       <MaxRegCount>32</MaxRegCount>
       <PtxAsOptionV>true</PtxAsOptionV>
-      <FastMath>false</FastMath>
+      <FastMath>true</FastMath>
       <AdditionalCompilerOptions>
       </AdditionalCompilerOptions>
       <GenerateRelocatableDeviceCode>false</GenerateRelocatableDeviceCode>
@@ -119,22 +119,24 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="..\kernel.cu">
-      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mandelbrot_variants.cuh;..\mandelbrot_variants.cuh;%(AdditionalDeps)</AdditionalDeps>
-      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Release|x64'">mandelbrot_variants.cuh;..\mandelbrot_variants.cuh;%(AdditionalDeps)</AdditionalDeps>
+      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mandelbrot.cuh;..\mandelbrot.cuh;%(AdditionalDeps)</AdditionalDeps>
+      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Release|x64'">mandelbrot.cuh;..\mandelbrot.cuh;%(AdditionalDeps)</AdditionalDeps>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bmp_main.h" />
     <ClInclude Include="..\bmp_output.h" />
+    <ClInclude Include="..\cmdline_parser.h" />
     <ClInclude Include="..\double2_inline.h" />
     <ClInclude Include="..\kernel.h" />
-    <ClInclude Include="..\mandelbrot_variants.cuh" />
+    <ClInclude Include="..\mandelbrot.cuh" />
     <ClInclude Include="..\window_gl.h" />
     <ClInclude Include="..\timing.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\bmp_main.cpp" />
     <ClCompile Include="..\bmp_output.cpp" />
+    <ClCompile Include="..\cmdline_parser.cpp" />
     <ClCompile Include="..\glew.c" />
     <ClCompile Include="..\main.cpp" />
     <ClCompile Include="..\timing.cpp" />

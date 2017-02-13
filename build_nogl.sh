@@ -1,6 +1,6 @@
 FILES="*.cpp *.cu"
-FLAGS="-std=c++11 -O3 -arch=sm_35 -res-usage -lineinfo -DCM_NOGL"
-FOLDERS="-Iinclude -Llib"
+FLAGS="-std=c++11 -Wall -Wextra -O3 -arch=sm_35 -res-usage -lineinfo -use-fast-math -DCM_NOGL"
+FOLDERS="-Iinclude"
 LIBS=""
 TARGET="bin/mandelbrot"
 

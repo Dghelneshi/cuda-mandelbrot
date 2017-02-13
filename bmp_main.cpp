@@ -1,35 +1,43 @@
-#include "kernel.h"
-#include "bmp_output.h"
+#include <cuda_runtime.h>
+
 #include <stdlib.h>
 #include <stdint.h>
-#include <cuda_runtime.h>
-#include "timing.h"
 #include <stdio.h>
 
-#define WIDTH 1920
-#define HEIGHT 1080
-#define BUFSIZE (WIDTH * HEIGHT * BYTESPERPIXEL)
+#include "kernel.h"
+#include "bmp_output.h"
+#include "timing.h"
 
-int bmpMain() {
+
+int bmpMain(const char* filename, kernel_params &params) {
+
+    if (!filename) filename = "output.bmp";
+
+    // TODO: implement proper supersampling
+    params.width  = params.sqrtSamples * params.width;
+    params.height = params.sqrtSamples * params.height;
+
+    size_t bufSize = size_t(params.width) * size_t(params.height) * sizeof(*params.image_buffer);
+
     uint32_t* cpuBuffer; // image in CPU memory
     uint32_t* gpuBuffer; // image in GPU memory
-    cpuBuffer = (uint32_t*) malloc(BUFSIZE);
-    cudaMalloc((void**)&gpuBuffer, BUFSIZE);
+    cpuBuffer = (uint32_t*) malloc(bufSize);
+    cudaMalloc((void**) &gpuBuffer, bufSize);
 
-    kernel_params params;
     params.image_buffer = gpuBuffer;
-    params.width  = WIDTH;
-    params.height = HEIGHT;
-
+    
+    cudaProfilerStart();
     cudaTimer t = startCudaTimer();
 
     LaunchKernel(params);
 
     float time = stopCudaTimer(t);
-    printf("Generated image in %fms\n", time);
+    printf("Generated image in %fms GPU time\n", time);
 
-    cudaMemcpy(cpuBuffer, gpuBuffer, BUFSIZE, cudaMemcpyDeviceToHost);
-    write_bmp("output.bmp", WIDTH, HEIGHT, (uint8_t*) cpuBuffer);
+    cudaMemcpy(cpuBuffer, gpuBuffer, bufSize, cudaMemcpyDeviceToHost);
+    int res = write_bmp(filename, params.width, params.height, (uint8_t*) cpuBuffer);
+    if (!res)
+        printf("Error: Could not open file %s\n", filename);
 
     free(cpuBuffer);
     cudaFree(gpuBuffer);
