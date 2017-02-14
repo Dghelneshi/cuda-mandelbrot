@@ -9,13 +9,16 @@
     #endif
 #else
     #define VK_ESCAPE 27
-    #define APIENTRY
 #endif
 
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 #include <cuda_gl_interop.h>
+
+#ifndef _WIN32
+#define APIENTRY
+#endif
 
 #include <cuda_runtime.h>
 
