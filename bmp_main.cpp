@@ -36,7 +36,7 @@ int bmpMain(const char* filename, kernel_params &params) {
 
     cudaMemcpy(cpuBuffer, gpuBuffer, bufSize, cudaMemcpyDeviceToHost);
     int res = write_bmp(filename, params.width, params.height, (uint8_t*) cpuBuffer);
-    if (!res)
+    if (res != 0)
         printf("Error: Could not open file %s\n", filename);
 
     free(cpuBuffer);
