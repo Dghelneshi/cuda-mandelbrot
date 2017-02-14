@@ -31,6 +31,7 @@
 #include "bmp_output.h"
 
 static void DrawTexture();
+static void DrawHUD();
 
 // buffer handles/pointers
 static GLuint pbo; // this PBO (pixel buffer object) is used to connect CUDA and OpenGL
@@ -43,8 +44,13 @@ static uint32_t window_width  = 1280;
 static uint32_t window_height = 720;
 static GLint    maxTextureSize;
 
+// states for hud/help text on screen
+static bool hudState = true;
+static bool helpState = true;
+
 // Mandelbrot kernel parameters
 static kernel_params params;
+
 
 // main display loop
 static void Display() {
@@ -73,6 +79,7 @@ static void Display() {
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
     
     DrawTexture();       // draw our result texture to the back buffer
+    DrawHUD();           // draw some helpful text on the screen
     glutSwapBuffers();   // swap the window's frame buffers
     glutPostRedisplay(); // tell glut that our window has changed
     
@@ -115,6 +122,51 @@ static void DrawTexture() {
     glPopMatrix();
 
     glDisable(GL_TEXTURE_2D);
+}
+
+static void DrawHUD() {
+
+    static const char *helpText[] {
+        "   H: toggle this help text (CTRL for HUD)",
+        "   R: reset",
+        " Q/E: zoom in/out (also mousewheel)",
+        " LMB: left mouse to drag the screen",
+        " 1-4: change fractal type",
+        " 6-9: change coloring",
+        " C/V: change bailout radius",
+        " B/N: change samples per pixel",
+        " ,/.: change exponent (type 3 only)"
+        " F/G: change iteration count",
+        "WASD: change z0 (also right mouse drag)",
+        "   I: write image to disk (CTRL for supersampled)",
+        "   P: write parameters to disk (CTRL to load)",
+        " K/L: change zoom speed",
+    };
+
+    static char buf[9][64];
+    snprintf(buf[0], 64, "   x: %.15e", params.centerX);
+    snprintf(buf[1], 64, "   y: %.15e", params.centerY);
+    snprintf(buf[2], 64, "   z: %e", params.zoom);
+    snprintf(buf[3], 64, "   i: %u", params.iter);
+    snprintf(buf[4], 64, "   e: %.15f", params.exponent);
+    snprintf(buf[5], 64, "   b: %.3f", params.bailout);
+    snprintf(buf[6], 64, "z0_x: %.15e", params.z0_x);
+    snprintf(buf[7], 64, "z0_y: %.15e", params.z0_y);
+    snprintf(buf[8], 64, " spp: %u", params.sqrtSamples * params.sqrtSamples);
+
+    if (helpState) {
+        int helpCount = sizeof(helpText) / sizeof(*helpText);
+        for (int i = 0; i < helpCount; ++i) {
+            glWindowPos2i(12, 12 * (helpCount - i));
+            glutBitmapString(GLUT_BITMAP_8_BY_13, (const unsigned char*) helpText[i]);
+        }
+    }
+    if (hudState) {
+        for (int i = 0; i < sizeof(buf) / sizeof(*buf); ++i) {
+            glWindowPos2i(12, window_height - 12 * (i + 1) - 10);
+            glutBitmapString(GLUT_BITMAP_8_BY_13, (const unsigned char*) buf[i]);
+        }
+    }
 }
 
 // initialize the PBO and texture for transferring data from CUDA to OpenGL
@@ -259,6 +311,15 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
 
     case VK_ESCAPE: // exit
         glutLeaveMainLoop();
+        break;
+
+    case 'h':
+        if (ctrlPressed) {
+            hudState = !hudState;
+        }
+        else {
+            helpState = !helpState;
+        }
         break;
 
     // switch mandelbrot type
