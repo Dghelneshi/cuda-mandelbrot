@@ -5,6 +5,8 @@
 #include "bmp_main.h"
 #include "kernel.h"
 #include "cmdline_parser.h"
+#include "helper_cuda.h"
+#include <cstdlib>
 
 #ifndef CM_NOGL
 #include "window_gl.h"
@@ -15,6 +17,9 @@ int main(int argc, char* argv[]) {
 
     cudaProfilerStop();
     initTime();
+
+    int i = gpuGetMaxGflopsDeviceId();
+    cudaSetDevice(i);
 
     kernel_params p;
     bool useGL = false;
