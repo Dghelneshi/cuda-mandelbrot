@@ -18,6 +18,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdio.h>
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
@@ -64,8 +65,7 @@ inline int gpuGetMaxGflopsDeviceId()
     cudaDeviceProp deviceProp;
     cudaGetDeviceCount(&device_count);
 
-
-    // Find the best major SM Architecture GPU device
+        // Find the best major SM Architecture GPU device
     for (int i = 0; i < device_count; i++) {
         cudaGetDeviceProperties(&deviceProp, i);
 
@@ -80,12 +80,13 @@ inline int gpuGetMaxGflopsDeviceId()
     for (int i = 0; i < device_count; i++) {
 
         cudaGetDeviceProperties(&deviceProp, i);
-
         if ((deviceProp.computeMode != cudaComputeModeProhibited) && (deviceProp.major == best_arch)) {
 
             int sm_per_multiproc = _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor);
 
             uint64_t compute_perf = (uint64_t) deviceProp.multiProcessorCount * sm_per_multiproc * deviceProp.clockRate;
+
+            printf("Device: %d | CUDA %d.%d | GFLOPS %.3f\n", i, deviceProp.major, deviceProp.minor, compute_perf / 1000000000.0f);
 
             if (compute_perf > max_compute_perf) {
                     max_compute_perf = compute_perf;
@@ -94,6 +95,7 @@ inline int gpuGetMaxGflopsDeviceId()
         }
     }
 
+    printf("Running on device %d!\n", max_perf_device);
     return max_perf_device;
 }
 
