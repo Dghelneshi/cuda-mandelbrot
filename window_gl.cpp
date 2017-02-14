@@ -9,6 +9,7 @@
     #endif
 #else
     #define VK_ESCAPE 27
+    #define APIENTRY
 #endif
 
 
