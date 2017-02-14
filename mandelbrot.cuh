@@ -1,5 +1,5 @@
-#include <vector_functions.h>
-#include <device_functions.h>
+#include <vector_functions.hpp>
+#include <device_functions.hpp>
 #include "helper_math.h"
 #include "double2_inline.h"
 #include <limits>
@@ -196,72 +196,6 @@ static __device__ T MandelbrotDistCubeGeneric(T x, T y, T bailout, T z0_x, T z0_
     return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
 }
 
-
-
-// double precision Mandelbrot with exponent = 2
-// returns distance estimation
-// z = z^2 + c
-static __device__ double MandelbrotDistSquareDouble(double x, double y, double bailout, double z0_x, double z0_y, int iter) {
-
-    double2 c = make_double2(x, y);
-    double2 z = make_double2(z0_x, z0_y);
-    double2 dz = make_double2(0.0, 0.0); // derivative z'
-    double len2 = 0.0;
-
-    int i;
-    for (i = 0; i < iter; i++) {
-
-        // z' = 2*z*z' + 1
-        dz = 2.0 * make_double2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x) + make_double2(1.0, 0.0);
-
-        // z = z^2 + c
-        z = make_double2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
-
-        len2 = dot(z, z);
-
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
-    }
-
-    // distance	estimation
-    // d(c) = |z|*log|z|/|z'|
-    double d = 0.5 * sqrt(len2 / dot(dz, dz)) * log(len2);
-
-    return (i == iter) ? 0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
-}
-
-
-// single precision Mandelbrot with exponent = 2
-// returns distance estimation
-// z = z^2 + c
-static __device__ float MandelbrotDistSquareFloat(float x, float y, float bailout, float z0_x, float z0_y, int iter) {
-
-    float2 c = make_float2(x, y);
-    float2 z = make_float2(z0_x, z0_y);
-    float2 dz = make_float2(0.0f, 0.0f); // derivative z'
-    float len2 = 0.0f;
-
-    int i;
-    for (i = 0; i < iter; i++) {
-
-        // z' = 2*z*z' + 1
-        dz = 2.0f * make_float2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x) + make_float2(1.0f, 0.0f);
-
-        // z = z^2 + c
-        z = make_float2(z.x*z.x - z.y*z.y, 2.0f*z.x*z.y) + c;
-
-        len2 = dot(z, z);
-
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
-    }
-
-    // distance	estimation
-    // d(c) = |z|*log|z|/|z'|
-    float d = 0.5f * sqrt(len2 / dot(dz, dz)) * log(len2);
-
-    return (i == iter) ? 0.0f : d; // estimate can be wrong inside blobs, so use iteration count as well
-}
 
 // "Burning Ship" with exponent = 2
 // returns distance estimation
@@ -520,13 +454,6 @@ template<> float MandelbrotDist<float, CM_FULL_GENERIC>(float x, float y, float 
 template<> double MandelbrotDist<double, CM_FULL_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
     return MandelbrotDistFullGeneric<double>(x, y, bailout, z0_x, z0_y, iter, exponent);
 }
-template<> float MandelbrotDist<float, CM_SQR_FLOAT>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotDistSquareFloat(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> double MandelbrotDist<double, CM_SQR_DOUBLE>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotDistSquareDouble(x, y, bailout, z0_x, z0_y, iter);
-}
-// not implemented
 template<> float MandelbrotDist<float, CM_BURNING_SHIP_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
     return BurningShipDistSquareGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
 }
@@ -561,10 +488,7 @@ template<> float MandelbrotSIter<float, CM_BURNING_SHIP_GENERIC>(float x, float 
 template<> float MandelbrotSIter<double, CM_BURNING_SHIP_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
     return BurningShipSquareGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
 }
-// not implemented
-template<> float MandelbrotSIter<float, CM_SQR_FLOAT>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return 0.0f;
-}
-template<> float MandelbrotSIter<double, CM_SQR_DOUBLE>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return 0.0;
-}
+
+// unused variants for performance comparisons
+#include "mandelbrot_unused.cuh"
+

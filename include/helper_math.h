@@ -34,6 +34,12 @@ typedef unsigned short ushort;
 
 #ifndef __CUDACC__
 #include <math.h>
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // host implementations of CUDA functions

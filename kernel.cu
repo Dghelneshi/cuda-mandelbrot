@@ -21,61 +21,6 @@ __device__ uint32_t RgbToInt(float3 &c)
     return RgbToInt(c.x, c.y, c.z);
 }
 
-// kernel using a switch for the different mandelbrot types. used as comparison to template solution.
-template<typename T>
-__global__ void SwitchKernel(cm_type t, cm_colors c, uint32_t *image_buffer, uint32_t w, uint32_t h, T centerX, T centerY, T zoom,
-                             T bailout, T z0_x, T z0_y, int iter, T exponent) {
-
-    // image x and y coordinates
-    uint32_t ix = blockIdx.x*blockDim.x + threadIdx.x;
-    uint32_t iy = blockIdx.y*blockDim.y + threadIdx.y;
-
-    if (ix >= w || iy >= h) return; // image does not necessarily fit nicely into blocks
-
-    T hw = w * (T)0.5;
-    T hh = h * (T)0.5;
-    // normalized image coordinates, y goes from -1 to 1, x is scaled by aspect
-    T nx = (ix - hw) / hh;
-    T ny = (iy - hh) / hh;
-    // function x and y coordinates
-    T x = zoom * nx + centerX;
-    T y = zoom * ny + centerY;
-
-    T dist;
-    switch (t) {
-    case CM_SQR_GENERIC:
-        dist = MandelbrotDistSquareGeneric<T>(x, y, bailout, z0_x, z0_y, iter);
-        break;
-    case CM_CUBE_GENERIC:
-        dist = MandelbrotDistCubeGeneric<T>(x, y, bailout, z0_x, z0_y, iter);
-        break;
-    case CM_FULL_GENERIC:
-        dist = MandelbrotDistFullGeneric<T>(x, y, bailout, z0_x, z0_y, iter, exponent);
-        break;
-    case CM_SQR_FLOAT:
-        dist = MandelbrotDistSquareFloat(x, y, bailout, z0_x, z0_y, iter);
-        break;
-    case CM_SQR_DOUBLE:
-        dist = MandelbrotDistSquareDouble(x, y, bailout, z0_x, z0_y, iter);
-        break;
-    }
-
-    float3 rgb;
-    switch (c) {
-    case CM_DIST_BLACK_BROWN_BLUE:
-        rgb = ColorizeMandelbrot<CM_DIST_BLACK_BROWN_BLUE>(float(dist / zoom));
-        break;
-    case CM_DIST_GREEN_BLUE:
-        rgb = ColorizeMandelbrot<CM_DIST_GREEN_BLUE>(float(dist / zoom));
-        break;
-    case CM_DIST_SNOWFLAKE:
-        rgb = ColorizeMandelbrot<CM_DIST_SNOWFLAKE>(float(dist / zoom));
-        break;
-    }
-
-    image_buffer[iy * w + ix] = RgbToInt(rgb);
-}
-
 // kernel using templates to avoid the switch in GPU code, uses distance function for color
 template<typename T, cm_type M, cm_colors C>
 __global__ void TemplateKernel(uint32_t *image_buffer, uint32_t w, uint32_t h, T centerX, T centerY, T zoom,

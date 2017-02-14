@@ -13,14 +13,17 @@
 
 
 #include <GL/glew.h>
-#include <GL/freeglut.h>
-#include <cuda_gl_interop.h>
-
-#ifndef _WIN32
-#define APIENTRY
+#ifdef _WIN32
+    #include <GL/wglew.h>
+#else
+    #include <GL/glxew.h>
+    #define APIENTRY // this should be correctly defined in glew.h, but apparently not?
 #endif
 
+#include <GL/freeglut.h>
+
 #include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -32,20 +35,30 @@
 #include "kernel.h"
 #include "cmdline_parser.h"
 #include "bmp_output.h"
+#include "helper_math.h"
+
 
 static void DrawTexture();
 static void DrawHUD();
+static void GenerateSampleDistribution();
+static void SetVSync(int i);
+
 
 // buffer handles/pointers
 static GLuint pbo; // this PBO (pixel buffer object) is used to connect CUDA and OpenGL
-static GLuint result_texture;  // the result is copied to this OpenGL texture
+static GLuint result_texture;  // the kernel result is copied from the PBO to this texture
 static uint32_t* image_buffer; // this is the actual memory pointer to the PBO
 
 // Window & Image
 #define CM_IMAGE_FORMAT GL_BGRA
 static uint32_t window_width  = 1280;
 static uint32_t window_height = 720;
-static GLint    maxTextureSize;
+static GLint maxTextureSize;
+static bool vsync = true;
+
+// sample distribution for image downscaling (z is Lanczos weight)
+static float3 *sampleDist = nullptr;
+static float totalLanczosWeight = 0.0f;
 
 // states for hud/help text on screen
 static bool hudState = true;
@@ -53,6 +66,7 @@ static bool helpState = true;
 
 // Mandelbrot kernel parameters
 static kernel_params params;
+
 
 // main display loop
 static void Display() {
@@ -72,22 +86,47 @@ static void Display() {
 
     cudaGLUnmapBufferObject(pbo); // unmap buffer so OpenGL can use our data
 
-    float gpu_time = stopCudaTimer(t);
-
+    float kernel_time = stopCudaTimer(t);
+    
     // copy the data from the PBO into our result texture
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
     glBindTexture(GL_TEXTURE_2D, result_texture);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, params.width, params.height, CM_IMAGE_FORMAT, GL_UNSIGNED_BYTE, NULL);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
-    
+
     DrawTexture();       // draw our result texture to the back buffer
     DrawHUD();           // draw some helpful text on the screen
     glutSwapBuffers();   // swap the window's frame buffers
     glutPostRedisplay(); // tell glut that our window has changed
+
+    // total frame time counter
+    // note that if VSync is on, there is no way of finding out the actual overhead
+    static uint64_t tStart = getTime();
+    uint64_t tEnd = getTime();
+    float time = timeDelta(tStart, tEnd);
+    tStart = tEnd;
     
     static char buf[256] = { 0 };
-    snprintf(buf, sizeof(buf) - 1, "CUDA-Mandelbrot - GPU: %6.3fms - x: %e | y : %e | z : %e | i : %d", gpu_time, params.centerX, params.centerY, params.zoom, params.iter);
+    if (vsync)
+        snprintf(buf, sizeof(buf) - 1, "CUDA-Mandelbrot - Kernel: %6.3fms - Total Frame Time: %6.3fms (VSynced)", kernel_time, time);
+    else    
+        snprintf(buf, sizeof(buf) - 1, "CUDA-Mandelbrot - Kernel: %6.3fms - Total Frame Time: %6.3fms (Overhead %6.3fms)", kernel_time, time, time - kernel_time);
     glutSetWindowTitle(buf);
+}
+
+
+#define M_PI_F 3.14159265f
+static float sinc(float x) {
+    return sin(M_PI_F * x) / (M_PI_F * x);
+}
+// Lanczos sampling weights
+static float lanczos(float d, float n) {
+    if (d == 0.0f)
+        return 1.0f;
+    else if (fabs(d) >= n)
+        return 0.0f;
+    else
+        return sinc(d) * sinc(d / n);
 }
 
 // display image to the screen as textured quad
@@ -99,29 +138,52 @@ static void DrawTexture() {
     glEnable(GL_TEXTURE_2D);
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
-    // set our view projection to orthographic, coordinates from -1,-1,-1 to 1, 1, 1
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
-    
-    // render a screen sized rectangle
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    // we draw the texture multiple times with sub-pixel offsets and accumulate the results
+    // this allows us to get multiple texture samples per pixel for anti-aliasing
 
-    glBegin(GL_QUADS);              // begin a quadrilateral
-    glTexCoord2f(0.0, 0.0);         // bottom left
-    glVertex3f(-1.0, -1.0, 0.5);
-    glTexCoord2f(1.0, 0.0);         // bottom right
-    glVertex3f(1.0, -1.0, 0.5);
-    glTexCoord2f(1.0, 1.0);         // top right
-    glVertex3f(1.0, 1.0, 0.5);
-    glTexCoord2f(0.0, 1.0);         // top left
-    glVertex3f(-1.0, 1.0, 0.5);
-    glEnd();
+    uint32_t spp = params.sqrtSamples * params.sqrtSamples;
+    for (uint32_t i = 0; i < spp; i++) {
 
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
+        // get the offsets and weight from our generated sample distribution
+        float shiftX = 2.0f * sampleDist[i].x / float(window_width);
+        float shiftY = 2.0f * sampleDist[i].y / float(window_height);
+        float weight = sampleDist[i].z; // Lanczos weight
+
+        // set our view projection to orthographic, coordinates from -1,-1,-1 to 1, 1, 1
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+        
+        // shift the projection by sub-pixel offsets to accumulate multiple samples per pixel
+        glTranslatef(shiftX, shiftY, 0.0f);
+
+        // render a screen sized rectangle with the texture on it
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        glBegin(GL_QUADS);              // begin a quadrilateral
+        glTexCoord2f(0.0, 0.0);         // bottom left
+        glVertex3f(-1.0, -1.0, 0.5);
+        glTexCoord2f(1.0, 0.0);         // bottom right
+        glVertex3f(1.0, -1.0, 0.5);
+        glTexCoord2f(1.0, 1.0);         // top right
+        glVertex3f(1.0, 1.0, 0.5);
+        glTexCoord2f(0.0, 1.0);         // top left
+        glVertex3f(-1.0, 1.0, 0.5);
+        glEnd();
+
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+
+        // accumulate the rendering result
+        // using unscaled weights and dividing at the end seems to be better at higher sample counts
+        float div = (spp >= 49) ? weight : (weight / totalLanczosWeight);
+        glAccum(i ? GL_ACCUM : GL_LOAD, div);
+    }
+    // draw the accumulated result on screen
+    float div = (spp >= 49) ? (1.0f / totalLanczosWeight) : 1.0f;
+    glAccum(GL_RETURN, div);
 
     glDisable(GL_TEXTURE_2D);
 }
@@ -143,6 +205,7 @@ static void DrawHUD() {
         "   I: write image to disk (CTRL for supersampled)",
         "   P: write parameters to disk (CTRL to load)",
         " K/L: change zoom speed",
+        "   X: toggle vsync",
     };
 
     static char buf[9][64];
@@ -171,8 +234,9 @@ static void DrawHUD() {
     }
 }
 
+
 // initialize the PBO and texture for transferring data from CUDA to OpenGL
-static void InitGLBuffers() {
+static void InitBuffers() {
 
     size_t num_texels = params.width * params.height;
     size_t size_tex_data = sizeof(*image_buffer) * num_texels;
@@ -189,22 +253,28 @@ static void InitGLBuffers() {
     glGenTextures(1, &result_texture);
     glBindTexture(GL_TEXTURE_2D, result_texture);
 
-    // set texture filtering (linear required to simulate supersampling)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // disable texture filtering (our Lanczos resampling already handles this)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // set texture size and format
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, params.width, params.height, 0, CM_IMAGE_FORMAT, GL_UNSIGNED_BYTE, NULL);
+
+    // generate sample distribution for image downscaling
+    // Note: technically only needed when sqrtSamples changes, but doesn't hurt to put this here
+    GenerateSampleDistribution();
 }
 
 // delete and recreate buffer
 static void ResizeImageBuffer() {
     params.width  = window_width  * params.sqrtSamples;
     params.height = window_height * params.sqrtSamples;
+
     cudaGLUnregisterBufferObject(pbo);
     glDeleteBuffers(1, &pbo);
     glDeleteTextures(1, &result_texture);
-    InitGLBuffers();
+
+    InitBuffers();
 }
 
 static void WindowResizeCallback(int width, int height) {
@@ -245,6 +315,31 @@ static void WriteImageToDisk(const char* filename, bool writeLargeImage = false)
     }
 }
 
+// generates the sample distribution for image downscaling, with Lanczos weights
+static void GenerateSampleDistribution() {
+    uint32_t n = params.sqrtSamples;
+    uint32_t spp = n * n;
+
+    if (sampleDist) free(sampleDist);
+    sampleDist = (float3*) malloc(spp * sizeof(*sampleDist));
+    totalLanczosWeight = 0.0f;
+
+    for (uint32_t i = 0; i < n; i++) {
+        for (uint32_t j = 0; j < n; j++) {
+            // sample distribution is a regular grid
+            float u_adjust = ((i + 0.5f) / float(n) - 0.5f);
+            float v_adjust = ((j + 0.5f) / float(n) - 0.5f);
+            sampleDist[i * n + j].x = u_adjust;
+            sampleDist[i * n + j].y = v_adjust;
+
+            float u_weight = lanczos(u_adjust, float(n));
+            float v_weight = lanczos(v_adjust, float(n));
+            sampleDist[i * n + j].z = u_weight*v_weight;
+
+            totalLanczosWeight += u_weight*v_weight;
+        }
+    }
+}
 
 ///////////
 // INPUT //
@@ -315,6 +410,13 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
         glutLeaveMainLoop();
         break;
 
+    // toggle VSync
+    case 'x':
+        vsync = !vsync;
+        SetVSync(vsync);
+        break;
+
+    // toggle text on screen
     case 'h':
         if (ctrlPressed) {
             hudState = !hudState;
@@ -408,13 +510,13 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
 
     case 'b': // decrease samples per pixel
         if (params.sqrtSamples > 1) {
-            params.sqrtSamples >>= 1;
+            params.sqrtSamples--;
             ResizeImageBuffer();
         }
         break;
 
     case 'n': { // increase samples per pixel
-        uint32_t newSpp = params.sqrtSamples << 1;
+        uint32_t newSpp = params.sqrtSamples + 1;
         if (((window_width  * newSpp) < (uint32_t) maxTextureSize) &&
             ((window_height * newSpp) < (uint32_t) maxTextureSize)) {
 
@@ -457,6 +559,18 @@ static void KeyboardCallback(unsigned char key, int x, int y) {
     }
 }
 
+static void SetVSync(int i) {
+#if _WIN32
+    if (WGLEW_EXT_swap_control)
+        wglSwapIntervalEXT(i);
+#else
+    if (GLXEW_EXT_swap_control)
+        glXSwapIntervalEXT(i);
+#endif
+    else
+        printf("Missing extension to control vsync\n");
+}
+
 static void APIENTRY PrintDebugMessage(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, GLvoid* userParam) {
     printf("%s\n", message);
 }
@@ -479,13 +593,14 @@ void GLWindowMain(int argc, char *argv[], const kernel_params& p) {
         return;
     }
 
+    SetVSync(vsync);
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
 
     params = p;
     params.width  = window_width  * p.sqrtSamples;
     params.height = window_height * p.sqrtSamples;
 
-    InitGLBuffers();
+    InitBuffers();
 
     // register callbacks
     glutDisplayFunc(Display);
@@ -494,7 +609,7 @@ void GLWindowMain(int argc, char *argv[], const kernel_params& p) {
     glutMouseWheelFunc(MouseWheelCallback);
     glutMouseFunc(MouseClickCallback);
     glutMotionFunc(MouseDragCallback);
-    
+
 #if _DEBUG
     printf("  VENDOR: %s\n", (const char *) glGetString(GL_VENDOR));
     printf(" VERSION: %s\n", (const char *) glGetString(GL_VERSION));

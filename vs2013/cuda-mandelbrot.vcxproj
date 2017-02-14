@@ -119,8 +119,8 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="..\kernel.cu">
-      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">mandelbrot.cuh;..\mandelbrot.cuh;%(AdditionalDeps)</AdditionalDeps>
-      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Release|x64'">mandelbrot.cuh;..\mandelbrot.cuh;%(AdditionalDeps)</AdditionalDeps>
+      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(AdditionalDeps)</AdditionalDeps>
+      <AdditionalDeps Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(AdditionalDeps)</AdditionalDeps>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
@@ -130,6 +130,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="..\double2_inline.h" />
     <ClInclude Include="..\kernel.h" />
     <ClInclude Include="..\mandelbrot.cuh" />
+    <ClInclude Include="..\mandelbrot_unused.cuh" />
     <ClInclude Include="..\window_gl.h" />
     <ClInclude Include="..\timing.h" />
   </ItemGroup>

@@ -87,8 +87,9 @@ void parseArgs(int argc, char** argv, kernel_params *p, bool *useGL = nullptr, c
     ReadParameter("-t", &p->type, argc, argv);
 
     uint32_t spp = 1;
-    if (ReadParameter("-spp", &spp, argc, argv) != 0)
+    if (ReadParameter("-spp", &spp, argc, argv) != 0) {
         p->sqrtSamples = uint32_t(sqrtf(float(spp)) + 0.5f);
+    }
 }
 
 // treats the given string as a command line and returns the parameters

@@ -13,7 +13,7 @@ int bmpMain(const char* filename, kernel_params &params) {
 
     if (!filename) filename = "output.bmp";
 
-    // TODO: implement proper supersampling
+    // TODO: implement proper supersampling like in GL window
     params.width  = params.sqrtSamples * params.width;
     params.height = params.sqrtSamples * params.height;
 
