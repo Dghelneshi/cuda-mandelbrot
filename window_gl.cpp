@@ -79,7 +79,7 @@ static kernel_params params;
 
 
 // main display loop
-static void Display() {
+static void DisplayCallback() {
 
     // clear the frame buffer
     glClearColor(0, 0, 0, 0);
@@ -666,8 +666,11 @@ static void SetVSync(int i) {
     if (WGLEW_EXT_swap_control)
         wglSwapIntervalEXT(i);
 #else
-    if (GLXEW_EXT_swap_control)
-        glXSwapIntervalEXT(i);
+    if (GLXEW_EXT_swap_control) {
+        Display *dpy = glXGetCurrentDisplay();
+        GLXDrawable drawable = glXGetCurrentDrawable();
+        glXSwapIntervalEXT(dpy, drawable, i);
+    }
 #endif
     else
         printf("Missing extension to control vsync\n");
@@ -732,7 +735,7 @@ void GLWindowMain(int argc, char *argv[], const kernel_params& kp, uint32_t widt
     InitBuffers();
 
     // register callbacks
-    glutDisplayFunc(Display);
+    glutDisplayFunc(DisplayCallback);
     glutReshapeFunc(WindowResizeCallback);
     glutKeyboardFunc(KeyboardCallback);
     glutMouseWheelFunc(MouseWheelCallback);
