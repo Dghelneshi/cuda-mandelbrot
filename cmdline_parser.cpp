@@ -13,6 +13,10 @@
 #include "kernel.h"
 #include "cmdline_parser.h"
 
+// TODO:
+// this system isn't too bad to use, but error checking is not one of its strengths
+// currently we only check arguments and whether any parameter name was wrong, but can't tell which one
+
 
 #define MAX_ARGV 128
 static char *static_argv[MAX_ARGV] = { 0 };
@@ -60,41 +64,76 @@ static int CheckParameter(const char *parameter, int argc = static_argc, char *a
     return 0;
 }
 
-void parseArgs(int argc, char** argv, kernel_params *p, bool *useGL = nullptr, const char *outputFile = nullptr) {
+// doesn't look very nice, but it's better than not checking at all
+#define ERROR_CHECK(validArgc,p) (validArgc += (p) ? 2 : 0)
 
+void ParseArgv(int argc, char** argv, kernel_params *kp, program_params *pp) {
+
+    if (CheckParameter("-help",  argc, argv) ||
+        CheckParameter("-?",     argc, argv) ||
+        CheckParameter("--help", argc, argv)) {
+
+        PrintCmdLineHelp();
+        exit(0); // might be a bit harsh, but shouldn't happen during normal runtime
+    }
+
+    int validArgc = 1; // used for error checking
+
+    // check for batch file first
     const char *batchFile = nullptr;
-    ReadParameter("-f", &batchFile, argc, argv);
+    ERROR_CHECK(validArgc, ReadParameter("-f", &batchFile, argc, argv));
     if (batchFile)
-        ReadParamsFromDisk(batchFile, p);
+        ReadParamsFromDisk(batchFile, kp, pp);
 
-    if (useGL)
-        *useGL = CheckParameter("-gl", argc, argv) != 0;
+    validArgc += (pp->useGl = (CheckParameter("-gl", argc, argv) != 0));
 
-    if (outputFile)
-        ReadParameter("-o", &outputFile, argc, argv);
+    ERROR_CHECK(validArgc, ReadParameter("-o",      &pp->outputFile,    argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-ww",     &pp->window_height, argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-wh",     &pp->window_height, argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-w",      &kp->imageWidth,    argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-width",  &kp->imageWidth,    argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-h",      &kp->imageHeight,   argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-height", &kp->imageHeight,   argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-x",      &kp->centerX,       argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-y",      &kp->centerY,       argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-z",      &kp->zoom,          argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-b",      &kp->bailout,       argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-sx",     &kp->z0_x,          argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-sy",     &kp->z0_y,          argc, argv));
+    ERROR_CHECK(validArgc, ReadParameter("-e",      &kp->exponent,      argc, argv));
 
-    ReadParameter("-w", &p->width, argc, argv);
-    ReadParameter("-h", &p->height, argc, argv);
-    ReadParameter("-i", &p->iter, argc, argv);
-    ReadParameter("-x", &p->centerX, argc, argv);
-    ReadParameter("-y", &p->centerY, argc, argv);
-    ReadParameter("-z", &p->zoom, argc, argv);
-    ReadParameter("-b", &p->bailout, argc, argv);
-    ReadParameter("-sx", &p->z0_x, argc, argv);
-    ReadParameter("-sy", &p->z0_y, argc, argv);
-    ReadParameter("-e", &p->exponent, argc, argv);
-    ReadParameter("-c", &p->color, argc, argv);
-    ReadParameter("-t", &p->type, argc, argv);
+    uint32_t i = 0;
+    ERROR_CHECK(validArgc, ReadParameter("-i", &i, argc, argv));
+    if (i > 0)
+        kp->iter = i;
 
-    uint32_t spp = 1;
-    if (ReadParameter("-spp", &spp, argc, argv) != 0) {
-        p->sqrtSamples = uint32_t(sqrtf(float(spp)) + 0.5f);
+    cm_colors c = CM_COLORS_END;
+    ERROR_CHECK(validArgc, ReadParameter("-c", &c, argc, argv));
+    if ((c >= 0) && (c < CM_COLORS_END) && (c != CM_COLOR_DIST_END))
+        kp->color = c;
+
+    cm_type t = CM_FRACTAL_TYPES_END;
+    ERROR_CHECK(validArgc, ReadParameter("-t", &t, argc, argv));
+    if ((t >= 0) && (t < CM_FRACTAL_TYPES_END))
+        kp->type = t;
+
+    uint32_t spp = 0;
+    ERROR_CHECK(validArgc, ReadParameter("-spp", &spp, argc, argv));
+    if (spp != 0)
+        kp->sqrtSamples = uint32_t(sqrtf(float(spp))+0.01f);
+
+    kp->bufferWidth  = kp->imageWidth  * kp->sqrtSamples;
+    kp->bufferHeight = kp->imageHeight * kp->sqrtSamples;
+
+    // perform a rudimentary error check
+    if (validArgc < argc) {
+        printf("Warning: there seems to be a typo in your parameters\n");
     }
 }
 
 // treats the given string as a command line and returns the parameters
 // NOTE: modifies cmdline, does not allocate or copy strings
-void ParseCmdLine(char* cmdline, kernel_params *p, bool *useGL = nullptr, const char *outputFile = nullptr) {
+void ParseCmdLine(char* cmdline, kernel_params *kp, program_params *pp) {
     static_argc = 1;
 
     while (*cmdline && (static_argc < MAX_ARGV)) {
@@ -122,10 +161,34 @@ void ParseCmdLine(char* cmdline, kernel_params *p, bool *useGL = nullptr, const 
         }
     }
 
-    parseArgs(static_argc, static_argv, p, useGL, outputFile);
+    ParseArgv(static_argc, static_argv, kp, pp);
 }
 
-// writes all parameters to disk in the same format as a command line input
+void PrintCmdLineHelp() {
+    printf("\n" \
+           "OPTIONS:\n" \
+           "  -gl\t\t\tLaunch an interactive OpenGL window\n" \
+           "  -x   <value>\t\tSet center x position\n" \
+           "  -y   <value>\t\tSet center y position\n" \
+           "  -z   <value>\t\tSet zoom level (z position, smaller means further in)\n" \
+           "  -w   <value>\t\tSet image width  (no effect in -gl mode, see -ww)\n" \
+           "  -h   <value>\t\tSet image height (no effect in -gl mode, see -wh)\n" \
+           "  -i   <value>\t\tSet number of fractal iterations\n" \
+           "  -b   <value>\t\tSet squared bailout radius for iteration\n" \
+           "  -e   <value>\t\tSet exponent (fractal type 2 only)\n" \
+           "  -c   <0-2,4>\t\tSet coloring method (3 is reserved)\n" \
+           "  -t   <0-3>\t\tSet fractal type\n" \
+           "  -sx  <value>\t\tSet starting z.x\n" \
+           "  -sy  <value>\t\tSet starting z.y\n" \
+           "  -spp <value>\t\tSet samples per pixel (Lanczos resampling), will be rounded down to next square number\n" \
+           "  -o   <file>\t\tSet the output filename (default 'output.bmp', not used with -gl)\n" \
+           "  -ww  <value>\t\tSet window width  (with -gl)\n" \
+           "  -wh  <value>\t\tSet window height (with -gl)\n" \
+           "  -f   <file>\t\tProcess contents of <file> as command line (always executed first)\n" \
+           "  \t\t\tCan be used to read in parameter files (.par) from GL window version\n");
+}
+
+// writes all kernel parameters to disk in the same format as a command line input
 void WriteParamsToDisk(const char* filename, const kernel_params& params) {
 
     FILE* f = fopen(filename, "w");
@@ -134,19 +197,17 @@ void WriteParamsToDisk(const char* filename, const kernel_params& params) {
         return;
     }
 
-    uint32_t width = params.width / params.sqrtSamples;
-    uint32_t height = params.height / params.sqrtSamples;
     uint32_t spp = params.sqrtSamples * params.sqrtSamples;
 
     fprintf(f, "-t %d -c %d -w %u -h %u -i %d -x %.17g -y %.17g -z %.17g -b %.17g -sx %.17g -sy %.17g -e %.17g -spp %u",
-            params.type, params.color, width, height, params.iter, params.centerX, params.centerY, params.zoom,
+            params.type, params.color, params.imageWidth, params.imageHeight, params.iter, params.centerX, params.centerY, params.zoom,
             params.bailout, params.z0_x, params.z0_y, params.exponent, spp);
 
     fclose(f);
     printf("Wrote parameters to %s\n", filename);
 }
 
-bool ReadParamsFromDisk(const char* filename, kernel_params* out_p) {
+bool ReadParamsFromDisk(const char* filename, kernel_params *out_kp, program_params *out_pp) {
 
     FILE* f = fopen(filename, "r");
     if (!f) {
@@ -158,10 +219,13 @@ bool ReadParamsFromDisk(const char* filename, kernel_params* out_p) {
     size_t count = fread(buffer, 1, sizeof(buffer) - 1, f);
     buffer[count] = 0;
 
-    kernel_params p = kernel_params(); // set standard values
+    // reset parameters
+    kernel_params kp = kernel_params();
+    program_params pp = program_params();
 
-    ParseCmdLine(buffer, &p);
-    *out_p = p;
+    ParseCmdLine(buffer, &kp, &pp);
+    *out_kp = kp;
+    *out_pp = pp;
 
     fclose(f);
     printf("Read parameters from %s\n", filename);

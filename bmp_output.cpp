@@ -29,6 +29,7 @@ struct BitmapHeader {
 
 
 int write_bmp(const char* filename, uint32_t width, uint32_t height, uint8_t* imageData) {
+
     uint32_t imageSize = width * height * BYTESPERPIXEL;
 
     struct BitmapHeader bmpHeader = {0};

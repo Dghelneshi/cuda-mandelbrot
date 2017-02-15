@@ -7,44 +7,46 @@
     #define NOMINMAX
     #include <windows.h>
 
-    static LARGE_INTEGER timerFreq;
+    static double freq;
 
-    void initTime() {
+    void InitTime() {
+        LARGE_INTEGER timerFreq;
         QueryPerformanceFrequency(&timerFreq);
+        freq = (double) timerFreq.QuadPart;
     }
 
-    uint64_t getTime() {
+    uint64_t GetTime() {
         LARGE_INTEGER t1;
         QueryPerformanceCounter(&t1);
         return t1.QuadPart;
     }
 
     // returns milliseconds
-    float timeDelta(uint64_t start, uint64_t stop) {
-        return float(((stop - start) * 1000) / (double) timerFreq.QuadPart);
+    float TimeDelta(uint64_t start, uint64_t stop) {
+        return float(((stop - start) * 1000) / freq);
     }
 
 #else
 
     #include <time.h>
 
-    void initTime() {}
+    void InitTime() {}
 
-    uint64_t getTime() {
+    uint64_t GetTime() {
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
         return (uint64_t) ts.tv_nsec + (uint64_t) ts.tv_sec * 1000000000ull;
     }
 
     // returns milliseconds
-    float timeDelta(uint64_t start, uint64_t stop) {
+    float TimeDelta(uint64_t start, uint64_t stop) {
         return ((stop - start) / 1000000.0);
     }
 
 #endif
 
-cudaTimer startCudaTimer() {
-    cudaTimer t;
+cuda_timer StartCudaTimer() {
+    cuda_timer t;
     cudaEventCreate(&t.start);
     cudaEventCreate(&t.stop, cudaEventBlockingSync);
     cudaEventRecord(t.start);
@@ -52,7 +54,7 @@ cudaTimer startCudaTimer() {
 }
 
 // blocks until gpu is finished, returns milliseconds
-float stopCudaTimer(cudaTimer t) {
+float StopCudaTimer(cuda_timer t) {
     float result = 0.0f;
     cudaEventRecord(t.stop);
     cudaEventSynchronize(t.stop);

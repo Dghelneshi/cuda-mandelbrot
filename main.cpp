@@ -16,26 +16,28 @@
 int main(int argc, char* argv[]) {
 
     cudaProfilerStop();
-    initTime();
+    InitTime();
+
+    kernel_params kp;
+    program_params pp;
+    ParseArgv(argc, argv, &kp, &pp);
 
     int i = gpuGetMaxGflopsDeviceId();
     cudaSetDevice(i);
 
-    kernel_params p;
-    bool useGL = false;
-    const char* outFile = nullptr;
-
-    parseArgs(argc, argv, &p, &useGL, outFile);
+    cudaFree(nullptr); // initialize the CUDA context at a known point to avoid performance measurement artifacts
     
-    if (useGL) {
+    cudaProfilerStart();
+
+    if (pp.useGl) {
         #ifdef CM_NOGL
             printf("Error: This executable was compiled without OpenGL support.");
         #else
-            GLWindowMain(argc, argv, p);
+            GLWindowMain(argc, argv, kp, pp.window_width, pp.window_height);
         #endif
     }
     else {
-        bmpMain(outFile, p);
+        bmpMain(pp.outputFile, kp);
     }
 
     cudaProfilerStop();

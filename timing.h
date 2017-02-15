@@ -3,14 +3,14 @@
 #include <stdint.h>
 #include <cuda_profiler_api.h>
 
-struct cudaTimer {
+struct cuda_timer {
     cudaEvent_t start;
     cudaEvent_t stop;
 };
 
-void initTime();
-uint64_t getTime();
-float timeDelta(uint64_t start, uint64_t stop); // returns milliseconds
+void InitTime();
+uint64_t GetTime();
+float TimeDelta(uint64_t start, uint64_t stop); // returns milliseconds
 
-cudaTimer startCudaTimer();
-float stopCudaTimer(cudaTimer t); // blocks until gpu is finished, returns milliseconds
+cuda_timer StartCudaTimer();
+float StopCudaTimer(cuda_timer t); // blocks until gpu is finished, returns milliseconds

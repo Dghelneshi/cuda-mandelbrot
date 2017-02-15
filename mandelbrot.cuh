@@ -43,7 +43,7 @@ __device__ __forceinline__ static void cpow(T x, T y, T& xres, T& yres, T n)
 {
     T r2 = x*x + y*y;
     T theta = atan2(y, x);
-    T mul = exp((T)0.5 * log(r2) * n);
+    T mul = exp(T(0.5) * log(r2) * n);
     T s, c;
     sincos<T>(theta * n, &s, &c);
     xres = mul * c;
@@ -56,327 +56,360 @@ __device__ __forceinline__ static void cpow(T &x, T &y, T n)
 {
     T r2 = x*x + y*y;
     T theta = atan2(y, x);
-    T mul = exp((T)0.5 * log(r2) * n);
+    T mul = exp(T(0.5) * log(r2) * n);
     T s, c;
     sincos<T>(theta * n, &s, &c);
     x = mul * c;
     y = mul * s;
 }
 
+/////////////////////////////////////////////
+// Fractals Returning Distance Estimations //
+/////////////////////////////////////////////
+
+
+// We actually only need a function, but C++ does not support partial template specialization for functions at all.
+// This would force us to explicitly instantiate every function, which kind of destroys a major reason why we use templates.
+template<typename T, cm_type V>
+struct MandelbrotDist {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const;
+};
+
 
 // Generic Mandelbrot with arbitrary exponent
 // returns distance estimation
 // z = z^n + c
 template<typename T>
-static __device__ T MandelbrotDistFullGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter, T n) {
+struct MandelbrotDist<T, CM_FULL_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T n) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T dzx = (T)0.0; // derivative z'
-    T dzy = (T)0.0;
-    T len2 = (T)0.0;
-    T chainx; // z^(n-1)
-    T chainy;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T dzx = (T)0.0; // derivative z'
+        T dzy = (T)0.0;
+        T len2 = (T)0.0;
+        T chainx; // z^(n-1)
+        T chainy;
 
-    int i;
-    for (i = 0; i < iter; i++) {
+        int i;
+        for (i = 0; i < iter; i++) {
 
-        // z' = n * z^(n-1) * z' + 1
-        cpow(zx, zy, chainx, chainy, n - (T)1.0);
-        chainx *= n;
-        chainy *= n;
-        T dzx_ = dzx;
-        dzx = chainx*dzx - chainy*dzy + 1.0;
-        dzy = chainx*dzy + chainy*dzx_;
+            // z' = n * z^(n-1) * z' + 1
+            cpow(zx, zy, chainx, chainy, n - (T)1.0);
+            chainx *= n;
+            chainy *= n;
+            T dzx_ = dzx;
+            dzx = chainx*dzx - chainy*dzy + 1.0;
+            dzy = chainx*dzy + chainy*dzx_;
 
-        // z = z^n + c
-        cpow(zx,zy,n);
-        zx += cx;
-        zy += cy;
+            // z = z^n + c
+            cpow(zx, zy, n);
+            zx += cx;
+            zy += cy;
 
-        len2 = zx*zx + zy*zy;
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // distance	estimation
+        // d(c) = |z|*log|z|/|z'|
+        // log(sqrt(r)) = 0.5 * log(r)
+        T dzlen2 = dzx*dzx + dzy*dzy;
+        T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
+
+        return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
     }
-
-    // distance	estimation
-    // d(c) = |z|*log|z|/|z'|
-    // log(sqrt(r)) = 0.5 * log(r)
-    T dzlen2 = dzx*dzx + dzy*dzy;
-    T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
-
-    return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
-}
+};
 
 // Generic Mandelbrot with exponent = 2
 // returns distance estimation
 // z = z^2 + c
 template<typename T>
-static __device__ T MandelbrotDistSquareGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter) {
+struct MandelbrotDist<T, CM_SQR_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T dzx = (T)0.0; // derivative z'
-    T dzy = (T)0.0;
-    T len2 = (T)0.0;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T dzx = (T)0.0; // derivative z'
+        T dzy = (T)0.0;
+        T len2 = (T)0.0;
 
-    int i;
-    for (i = 0; i < iter; i++) {
-        // z' = 2*z*z' + 1
-        T dzx_ = dzx;
-        dzx = (T)2.0 * (zx*dzx - zy*dzy) + (T)1.0;
-        dzy = (T)2.0 * (zx*dzy + zy*dzx_);
+        int i;
+        for (i = 0; i < iter; i++) {
+            // z' = 2*z*z' + 1
+            T dzx_ = dzx;
+            dzx = (T)2.0 * (zx*dzx - zy*dzy) + (T)1.0;
+            dzy = (T)2.0 * (zx*dzy + zy*dzx_);
 
-        // z = z^2 + c
-        T zx_ = zx;
-        zx =  zx*zx - zy*zy  + cx;
-        zy = (T)2.0 * zx_*zy + cy;
+            // z = z^2 + c
+            T zx_ = zx;
+            zx = zx*zx - zy*zy + cx;
+            zy = (T)2.0 * zx_*zy + cy;
 
-        len2 = zx*zx + zy*zy;
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // distance	estimation
+        // d(c) = |z|*log|z|/|z'|
+        T dzlen2 = dzx*dzx + dzy*dzy;
+        T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
+
+        return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
     }
-
-    // distance	estimation
-    // d(c) = |z|*log|z|/|z'|
-    T dzlen2 = dzx*dzx + dzy*dzy;
-    T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
-    
-    return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
-}
+};
 
 // Generic Mandelbrot with exponent = 3
 // returns distance estimation
 // z = z^3 + c
 template<typename T>
-static __device__ T MandelbrotDistCubeGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter) {
+struct MandelbrotDist<T, CM_CUBE_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T dzx = (T)0.0; // derivative z'
-    T dzy = (T)0.0;
-    T len2 = (T)0.0;
-    T z2x; // z^2
-    T z2y;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T dzx = (T)0.0; // derivative z'
+        T dzy = (T)0.0;
+        T len2 = (T)0.0;
+        T z2x; // z^2
+        T z2y;
 
-    int i;
-    for (i = 0; i < iter; i++) {
+        int i;
+        for (i = 0; i < iter; i++) {
 
-        // z^2
-        z2x =  zx*zx - zy*zy;
-        z2y = T(2.0) * zx*zy;
+            // z^2
+            z2x = zx*zx - zy*zy;
+            z2y = T(2.0) * zx*zy;
 
-        // z' = 3 * z^2 * z' + 1
-        T dzx_ = dzx;
-        dzx = T(3.0) * (z2x*dzx - z2y*dzy) + T(1.0);
-        dzy = T(3.0) * (z2x*dzy + z2y*dzx_);
-        
-        // z = z^3 + c
-        T zx_ = zx;
-        zx = z2x*zx - z2y*zy  + cx;
-        zy = z2x*zy + z2y*zx_ + cy;
+            // z' = 3 * z^2 * z' + 1
+            T dzx_ = dzx;
+            dzx = T(3.0) * (z2x*dzx - z2y*dzy) + T(1.0);
+            dzy = T(3.0) * (z2x*dzy + z2y*dzx_);
 
-        len2 = zx*zx + zy*zy;
+            // z = z^3 + c
+            T zx_ = zx;
+            zx = z2x*zx - z2y*zy + cx;
+            zy = z2x*zy + z2y*zx_ + cy;
 
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // distance	estimation
+        // d(c) = |z|*log|z|/|z'|
+        T dzlen2 = dzx*dzx + dzy*dzy;
+        T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
+
+        return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
     }
-
-    // distance	estimation
-    // d(c) = |z|*log|z|/|z'|
-    T dzlen2 = dzx*dzx + dzy*dzy;
-    T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
-
-    return (i == iter) ? (T)0.0 : d; // estimate can be wrong inside blobs, so use iteration count as well
-}
+};
 
 
 // "Burning Ship" with exponent = 2
 // returns distance estimation
 // z = (|x| + i|y|)^2 - c
 template<typename T>
-static __device__ float BurningShipDistSquareGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter) {
+struct MandelbrotDist<T, CM_BURNING_SHIP_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T len2 = (T)0.0;
-    T dzx = (T)0.0; // derivative z'
-    T dzy = (T)0.0;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T len2 = (T)0.0;
+        T dzx = (T)0.0; // derivative z'
+        T dzy = (T)0.0;
 
-    int i;
-    for (i = 0; i < iter; i++) {
-        // z' = 2*z*z' + 1
-        // not sure if correct?
-        T dzx_ = dzx;
-        dzx = (T)2.0 * (zx*dzx - zy*dzy) + (T)1.0;
-        dzy = (T)2.0 * (zx*dzy + zy*dzx_);
+        int i;
+        for (i = 0; i < iter; i++) {
+            // z' = 2*z*z' + 1
+            // not sure if correct?
+            T dzx_ = dzx;
+            dzx = (T)2.0 * (zx*dzx - zy*dzy) + (T)1.0;
+            dzy = (T)2.0 * (zx*dzy + zy*dzx_);
 
-        // z = (|x| + i|y|)^2 - c
-        T zx_ = zx;
-        zx = zx*zx - zy*zy - cx;
-        zy = (T)2.0 * fabs(zx_*zy) - cy;
+            // z = (|x| + i|y|)^2 - c
+            T zx_ = zx;
+            zx = zx*zx - zy*zy - cx;
+            zy = (T)2.0 * fabs(zx_*zy) - cy;
 
-        len2 = zx*zx + zy*zy;
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // distance	estimation
+        // d(c) = |z|*log|z|/|z'|
+        T dzlen2 = dzx*dzx + dzy*dzy;
+        T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
+
+        return (i == iter) ? 0.0f : d; // estimate can be wrong inside blobs, so use iteration count as well
     }
-
-    // distance	estimation
-    // d(c) = |z|*log|z|/|z'|
-    T dzlen2 = dzx*dzx + dzy*dzy;
-    T d = (T)0.5 * sqrt(len2 / dzlen2) * log(len2);
-
-    return (i == iter) ? 0.0f : d; // estimate can be wrong inside blobs, so use iteration count as well
-}
+};
 
 
 
+///////////////////////////////////////////////
+// Fractals Returning Smooth Iteration Count //
+///////////////////////////////////////////////
 
-/////////////////////////////
-// Smooth Iteration Count  //
-/////////////////////////////
+// We actually only need a function, but C++ does not support partial template specialization for functions at all.
+// This would force us to explicitly instantiate every function, which kind of destroys a major reason why we use templates.
+template<typename T, cm_type V>
+struct MandelbrotSIter {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const;
+};
 
 // Generic Mandelbrot with arbitrary exponent
 // returns smooth iteration count
 // z = z^n + c
 template<typename T>
-static __device__ float MandelbrotFullGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter, T n) {
+struct MandelbrotSIter<T, CM_FULL_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T n) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T len2 = T(0.0);
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T len2 = T(0.0);
 
-    int i;
-    for (i = 0; i < iter; i++) {
+        int i;
+        for (i = 0; i < iter; i++) {
 
-        // z = z^n + c
-        cpow(zx, zy, n);
-        zx += cx;
-        zy += cy;
+            // z = z^n + c
+            cpow(zx, zy, n);
+            zx += cx;
+            zy += cy;
 
-        len2 = zx*zx + zy*zy;
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // smooth iteration count
+        float si = float(i) - log2(log2(float(len2)) / log2(float(bailout))) / log2(float(n));
+
+        return (i == iter) ? NAN : si; // prevent artifacts inside blobs
     }
-
-    // smooth iteration count
-    float si = float(i) - log2(log2(float(len2)) / log2(float(bailout))) / log2(float(n));
-
-    return (i == iter) ? NAN : si; // prevent artifacts inside blobs
-}
+};
 
 
 // Generic Mandelbrot with exponent = 2
 // returns smooth iteration count
 // z = z^2 + c
 template<typename T>
-static __device__ float MandelbrotSquareGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter) {
+struct MandelbrotSIter<T, CM_SQR_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T len2 = (T)0.0;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T len2 = (T)0.0;
 
-    int i;
-    for (i = 0; i < iter; i++) {
+        int i;
+        for (i = 0; i < iter; i++) {
 
-        // z = z^2 + c
-        T zx_ = zx;
-        zx = zx*zx - zy*zy + cx;
-        zy = (T)2.0 * zx_*zy + cy;
+            // z = z^2 + c
+            T zx_ = zx;
+            zx = zx*zx - zy*zy + cx;
+            zy = (T)2.0 * zx_*zy + cy;
 
-        len2 = zx*zx + zy*zy;
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // smooth iteration count
+        float si = float(i) - log2(log2(float(len2)) / log2(float(bailout)));
+
+        return (i == iter) ? NAN : si; // prevent artifacts inside blobs
     }
-
-    // smooth iteration count
-    float si = float(i) - log2(log2(float(len2)) / log2(float(bailout)));
-
-    return (i == iter) ? NAN : si; // prevent artifacts inside blobs
-}
+};
 
 // Generic Mandelbrot with exponent = 3
 // returns smooth iteration count
 // z = z^3 + c
 template<typename T>
-static __device__ T MandelbrotCubeGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter) {
+struct MandelbrotSIter<T, CM_CUBE_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T len2;
-    T z2x; // z^2
-    T z2y;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T len2;
+        T z2x; // z^2
+        T z2y;
 
-    int i;
-    for (i = 0; i < iter; i++) {
+        int i;
+        for (i = 0; i < iter; i++) {
 
-        // z^2
-        z2x = zx*zx - zy*zy;
-        z2y = T(2.0) * zx*zy;
+            // z^2
+            z2x = zx*zx - zy*zy;
+            z2y = T(2.0) * zx*zy;
 
-        // z = z^3 + c
-        T zx_ = zx;
-        zx = z2x*zx - z2y*zy  + cx;
-        zy = z2x*zy + z2y*zx_ + cy;
+            // z = z^3 + c
+            T zx_ = zx;
+            zx = z2x*zx - z2y*zy + cx;
+            zy = z2x*zy + z2y*zx_ + cy;
 
-        len2 = zx*zx + zy*zy;
+            len2 = zx*zx + zy*zy;
 
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // smooth iteration count
+        float si = float(i) - log2(log2(float(len2)) / log2(float(bailout))) / log2(3.0f);
+
+        return (i == iter) ? NAN : si; // prevent artifacts inside blobs
     }
-
-    // smooth iteration count
-    float si = float(i) - log2(log2(float(len2)) / log2(float(bailout))) / log2(3.0f);
-
-    return (i == iter) ? NAN : si; // prevent artifacts inside blobs
-}
+};
 
 
 // "Burning Ship" with exponent = 2
 // returns smooth iteration count
 // z = (|x| + i|y|)^2 - c
 template<typename T>
-static __device__ float BurningShipSquareGeneric(T x, T y, T bailout, T z0_x, T z0_y, int iter) {
+struct MandelbrotSIter<T, CM_BURNING_SHIP_GENERIC> {
+    __device__ __forceinline__ T operator()(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent) const {
 
-    T cx = x;
-    T cy = y;
-    T zx = z0_x;
-    T zy = z0_y;
-    T len2 = (T)0.0;
+        T cx = x;
+        T cy = y;
+        T zx = z0_x;
+        T zy = z0_y;
+        T len2 = (T)0.0;
 
-    int i;
-    for (i = 0; i < iter; i++) {
+        int i;
+        for (i = 0; i < iter; i++) {
 
-        // z = (|x| + i|y|)^2 - c
-        T zx_ = zx;
-        zx =  zx*zx - zy*zy        - cx;
-        zy = (T)2.0 * fabs(zx_*zy) - cy;
+            // z = (|x| + i|y|)^2 - c
+            T zx_ = zx;
+            zx = zx*zx - zy*zy - cx;
+            zy = (T)2.0 * fabs(zx_*zy) - cy;
 
-        len2 = zx*zx + zy*zy;
-        // if z is too far from the origin, assume divergence
-        if (len2 > bailout) break;
+            len2 = zx*zx + zy*zy;
+            // if z is too far from the origin, assume divergence
+            if (len2 > bailout) break;
+        }
+
+        // smooth iteration count
+        float si = float(i) - log2(log2(float(len2)) / log2(float(bailout)));
+
+        return (i == iter) ? NAN : si; // prevent artifacts inside blobs
     }
-
-    // smooth iteration count
-    float si = float(i) - log2(log2(float(len2)) / log2(float(bailout)));
-
-    return (i == iter) ? NAN : si; // prevent artifacts inside blobs
-}
-
+};
 
 ////////////////////////
 // Coloring Functions //
@@ -428,66 +461,7 @@ __device__ float3 ColorizeMandelbrot<CM_ITER_BLACK_BROWN_BLUE>(float i) {
     return rgb;
 }
 
-//////////////////////////
-
-// unfortunately, partial specialization of functions is not supported by C++.
-// this is why we need to write all of this nonsense to instantiate the float/double variants explicitly.
-
-template<typename T, cm_type V>
-__device__ __forceinline__ T MandelbrotDist(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent);
-
-template<> float MandelbrotDist<float, CM_SQR_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotDistSquareGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> double MandelbrotDist<double, CM_SQR_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotDistSquareGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotDist<float, CM_CUBE_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotDistCubeGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> double MandelbrotDist<double, CM_CUBE_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotDistCubeGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotDist<float, CM_FULL_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotDistFullGeneric<float>(x, y, bailout, z0_x, z0_y, iter, exponent);
-}
-template<> double MandelbrotDist<double, CM_FULL_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotDistFullGeneric<double>(x, y, bailout, z0_x, z0_y, iter, exponent);
-}
-template<> float MandelbrotDist<float, CM_BURNING_SHIP_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return BurningShipDistSquareGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> double MandelbrotDist<double, CM_BURNING_SHIP_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return BurningShipDistSquareGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
-}
-
-template<typename T, cm_type V>
-__device__ __forceinline__ float MandelbrotSIter(T x, T y, T bailout, T z0_x, T z0_y, int iter, T exponent);
-
-template<> float MandelbrotSIter<float, CM_SQR_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotSquareGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotSIter<double, CM_SQR_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotSquareGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotSIter<float, CM_FULL_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotFullGeneric<float>(x, y, bailout, z0_x, z0_y, iter, exponent);
-}
-template<> float MandelbrotSIter<double, CM_FULL_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotFullGeneric<double>(x, y, bailout, z0_x, z0_y, iter, exponent);
-}
-template<> float MandelbrotSIter<float, CM_CUBE_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return MandelbrotCubeGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotSIter<double, CM_CUBE_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return MandelbrotCubeGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotSIter<float, CM_BURNING_SHIP_GENERIC>(float x, float y, float bailout, float z0_x, float z0_y, int iter, float exponent) {
-    return BurningShipSquareGeneric<float>(x, y, bailout, z0_x, z0_y, iter);
-}
-template<> float MandelbrotSIter<double, CM_BURNING_SHIP_GENERIC>(double x, double y, double bailout, double z0_x, double z0_y, int iter, double exponent) {
-    return BurningShipSquareGeneric<double>(x, y, bailout, z0_x, z0_y, iter);
-}
+/////////////////////////////////////////////////
 
 // unused variants for performance comparisons
 #include "mandelbrot_unused.cuh"

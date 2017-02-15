@@ -7,10 +7,10 @@ enum cm_type {
     CM_CUBE_GENERIC,
     CM_FULL_GENERIC,
     CM_BURNING_SHIP_GENERIC,
-    CM_VARIANTS_END,
 
     CM_SQR_FLOAT, // these are for timing/testing purposes
     CM_SQR_DOUBLE,
+    CM_FRACTAL_TYPES_END,
 };
 
 enum cm_colors {
@@ -21,7 +21,7 @@ enum cm_colors {
 
     CM_ITER_BLACK_BROWN_BLUE,
 
-    CM_COLOR_END
+    CM_COLORS_END
 };
 
 // NOTE: do not use kernel_params for GPU code since it increases register pressure
@@ -30,8 +30,10 @@ struct kernel_params {
     cm_colors color;
 
     uint32_t* image_buffer;
-    uint32_t width;
-    uint32_t height;
+    uint32_t imageWidth;
+    uint32_t imageHeight;
+    uint32_t bufferWidth; // accounts for multiple samples per pixel
+    uint32_t bufferHeight;
     uint32_t sqrtSamples;
 
     uint32_t iter;
@@ -47,9 +49,11 @@ struct kernel_params {
         type = CM_SQR_GENERIC;
         color = CM_ITER_BLACK_BROWN_BLUE;
         image_buffer = nullptr;
-        width = 1920;
-        height = 1080;
-        sqrtSamples = 1;
+        imageWidth = 1920;
+        imageHeight = 1080;
+        sqrtSamples = 2;
+        bufferWidth  = sqrtSamples * imageWidth;
+        bufferHeight = sqrtSamples * imageHeight;
         iter = 256;
         centerX = -0.5;
         centerY = 0.0;
@@ -62,5 +66,7 @@ struct kernel_params {
 };
 
 extern "C" {
-    void LaunchKernel(const kernel_params &p);
+    void LaunchFractalKernel(const kernel_params &p);
+    void LaunchResamplingKernel(uint32_t * src, uint32_t * dest, uint32_t target_width, uint32_t target_height, uint32_t n);
+    float GenerateKernelLanczosWeights(uint32_t n);
 }
