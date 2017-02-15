@@ -7,7 +7,6 @@
 #include "kernel.h"
 #include "bmp_output.h"
 #include "timing.h"
-#include <windows.h>
 
 #define PERF_PRINT_FORMAT "%26s%8.3fms\n"
 
