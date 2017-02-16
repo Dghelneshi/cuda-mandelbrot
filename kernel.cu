@@ -50,8 +50,9 @@ static __constant__ float lanczosWeights_const[MAX_SAMPLES];
 #endif
 
 // Downscales an image by n in each dimension
-// This is a somewhat naive implementation of Lanczos, using an ever increasing amount of lobes (samples).
+// Note: This is a somewhat naive implementation of Lanczos, using an ever increasing amount of lobes (samples).
 // TODO: Having a fixed lobe count and applying the resampling multiple times should decrease ringing artifacts.
+//       Could also start threads depending on source image size and do a reduction-type kernel. Should be faster.
 __global__ void LanczosResample(uint32_t * __restrict__ src, uint32_t * __restrict__ dest,
                                 uint32_t target_width, uint32_t target_height, uint32_t n) {
     // target x and y coordinates

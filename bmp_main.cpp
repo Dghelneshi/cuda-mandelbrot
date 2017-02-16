@@ -28,7 +28,7 @@ int bmpMain(const char* filename, kernel_params &params) {
     cudaMalloc(&gpuBuffer, bufferSize);
     params.image_buffer = gpuBuffer;
 
-    printf(PERF_PRINT_FORMAT, "Buffer allocation: ", TimeDelta(tStart, GetTime()));
+    printf(PERF_PRINT_FORMAT, "Image Buffer allocation: ", TimeDelta(tStart, GetTime()));
         
     cuda_timer t = StartCudaTimer();
     LaunchFractalKernel(params);
@@ -57,17 +57,19 @@ int bmpMain(const char* filename, kernel_params &params) {
     printf(PERF_PRINT_FORMAT, "Memcpy to host: ", TimeDelta(t1, GetTime()));
 
     t1 = GetTime();
-    int res = write_bmp(filename, params.imageWidth, params.imageHeight, (uint8_t*) cpuBuffer);
+    bool success = write_bmp(filename, params.imageWidth, params.imageHeight, (uint8_t*) cpuBuffer);
     
-    if (res != 0)
-        printf("Error: Could not open file %s\n", filename);
-
     printf(PERF_PRINT_FORMAT, "Bitmap write: ", TimeDelta(t1, GetTime()));
 
     free(cpuBuffer);
     cudaFree(resultBuffer);
 
-    printf(PERF_PRINT_FORMAT, "Total time spent: ", TimeDelta(tStart, GetTime()));
+    printf(PERF_PRINT_FORMAT, "Total [w/o CUDA Init]: ", TimeDelta(tStart, GetTime()));
+
+    if (success)
+        printf("Wrote output to file '%s'.\n", filename);
+    else
+        printf("Error: Could not open file '%s'.\n", filename);
 
     return 0;
 }

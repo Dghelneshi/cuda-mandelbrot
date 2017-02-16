@@ -17,6 +17,7 @@ int main(int argc, char* argv[]) {
 
     cudaProfilerStop();
     InitTime();
+    uint64_t tStart = GetTime();
 
     kernel_params kp;
     program_params pp;
@@ -37,6 +38,7 @@ int main(int argc, char* argv[]) {
         #endif
     }
     else {
+        printf("%26s%8.3fms\n", "CUDA Initialization: ", TimeDelta(tStart, GetTime()));
         bmpMain(pp.outputFile, kp);
     }
 

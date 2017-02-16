@@ -351,7 +351,7 @@ static void WindowResizeCallback(int width, int height) {
 static void WriteImageToDisk(const char* filename, bool writeLargeImage = false) {
     size_t bufferSize;
     uint32_t *cpuBuffer;
-    int result;
+    bool success;
 
     if (writeLargeImage) {
         // writes the entire image buffer to disk, possibly hundreds of MB!
@@ -366,19 +366,22 @@ static void WriteImageToDisk(const char* filename, bool writeLargeImage = false)
             cudaMemcpy(cpuBuffer, params.image_buffer, bufferSize, cudaMemcpyDeviceToHost);
             cudaGLUnmapBufferObject(pbo);
         }
-        result = write_bmp(filename, params.bufferWidth, params.bufferHeight, (uint8_t*) cpuBuffer);
+        success = write_bmp(filename, params.bufferWidth, params.bufferHeight, (uint8_t*) cpuBuffer);
     }
     else {
         // writes the window contents to disk
         bufferSize = params.imageWidth * params.imageHeight * sizeof(*params.image_buffer);
         cpuBuffer = (uint32_t*) malloc(bufferSize);
         glReadPixels(0, 0, params.imageWidth, params.imageHeight, GL_BGRA, GL_UNSIGNED_BYTE, cpuBuffer);
-        result = write_bmp(filename, params.imageWidth, params.imageHeight, (uint8_t*) cpuBuffer);
+        success = write_bmp(filename, params.imageWidth, params.imageHeight, (uint8_t*) cpuBuffer);
     }
 
     free(cpuBuffer);
-    if (result == 0) {
-        printf("Wrote image to %s\n", filename);
+    if (success) {
+        printf("Wrote image to '%s'.\n", filename);
+    }
+    else {
+        printf("Error: Could not open file '%s'.\n", filename);
     }
 }
 

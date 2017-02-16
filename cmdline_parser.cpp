@@ -127,7 +127,7 @@ void ParseArgv(int argc, char** argv, kernel_params *kp, program_params *pp) {
 
     // perform a rudimentary error check
     if (validArgc < argc) {
-        printf("Warning: there seems to be a typo in your parameters\n");
+        printf("Warning: Unrecognized parameter.\n");
     }
 }
 
@@ -193,7 +193,7 @@ void WriteParamsToDisk(const char* filename, const kernel_params& params) {
 
     FILE* f = fopen(filename, "w");
     if (!f) {
-        printf("Error: Could not open file %s\n", filename);
+        printf("Error: Could not open file '%s'.\n", filename);
         return;
     }
 
@@ -204,14 +204,14 @@ void WriteParamsToDisk(const char* filename, const kernel_params& params) {
             params.bailout, params.z0_x, params.z0_y, params.exponent, spp);
 
     fclose(f);
-    printf("Wrote parameters to %s\n", filename);
+    printf("Wrote parameters to '%s'.\n", filename);
 }
 
 bool ReadParamsFromDisk(const char* filename, kernel_params *out_kp, program_params *out_pp) {
 
     FILE* f = fopen(filename, "r");
     if (!f) {
-        printf("Error: Could not open file %s\n", filename);
+        printf("Error: Could not open file '%s'.\n", filename);
         return false;
     }
 
@@ -228,6 +228,6 @@ bool ReadParamsFromDisk(const char* filename, kernel_params *out_kp, program_par
     *out_pp = pp;
 
     fclose(f);
-    printf("Read parameters from %s\n", filename);
+    printf("Read parameters from '%s'.\n", filename);
     return true;
 }

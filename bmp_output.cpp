@@ -28,7 +28,7 @@ struct BitmapHeader {
 #pragma pack(pop)
 
 
-int write_bmp(const char* filename, uint32_t width, uint32_t height, uint8_t* imageData) {
+bool write_bmp(const char* filename, uint32_t width, uint32_t height, uint8_t* imageData) {
 
     uint32_t imageSize = width * height * BYTESPERPIXEL;
 
@@ -44,7 +44,7 @@ int write_bmp(const char* filename, uint32_t width, uint32_t height, uint8_t* im
     bmpHeader.bitsPerPixel    = 8 * BYTESPERPIXEL;
     
     FILE* outputFile = fopen(filename, "wb");
-    if (!outputFile) return 1;
+    if (!outputFile) return false;
 
     /* write the header  */
     fwrite(&bmpHeader, 1, sizeof(bmpHeader), outputFile);
@@ -52,5 +52,5 @@ int write_bmp(const char* filename, uint32_t width, uint32_t height, uint8_t* im
     fwrite(imageData, 1, imageSize, outputFile);
 
     fclose(outputFile);
-    return 0;
+    return true;
 }
