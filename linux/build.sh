@@ -1,8 +1,8 @@
-FILES="*.cpp *.c *.cu"
+FILES="../*.cpp ../*.c ../*.cu"
 FLAGS="-std=c++11 -O3 -arch=sm_35 -res-usage -lineinfo -use_fast_math"
-FOLDERS="-Iinclude"
+FOLDERS="-I../include -L../lib"
 LIBS="-lGL -lglut -lGLU"
-TARGET="bin/mandelbrot"
+TARGET="../bin/mandelbrot"
 
-mkdir -p bin
+mkdir -p ../bin
 nvcc $FILES $FOLDERS $FLAGS $LIBS -o $TARGET

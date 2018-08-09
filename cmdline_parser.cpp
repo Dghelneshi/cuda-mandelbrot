@@ -85,7 +85,7 @@ void ParseArgv(int argc, char** argv, kernel_params *kp, program_params *pp) {
     if (batchFile)
         ReadParamsFromDisk(batchFile, kp, pp);
 
-    validArgc += (pp->useGl = (CheckParameter("-gl", argc, argv) != 0));
+    validArgc += (pp->useGl = (CheckParameter("-nogl", argc, argv) == 0));
 
     ERROR_CHECK(validArgc, ReadParameter("-o",      &pp->outputFile,    argc, argv));
     ERROR_CHECK(validArgc, ReadParameter("-ww",     &pp->window_height, argc, argv));
@@ -167,7 +167,7 @@ void ParseCmdLine(char* cmdline, kernel_params *kp, program_params *pp) {
 void PrintCmdLineHelp() {
     printf("\n" \
            "OPTIONS:\n" \
-           "  -gl\t\t\tLaunch an interactive OpenGL window\n" \
+           "  -nogl\t\t\tUse command line interface only\n" \
            "  -x   <value>\t\tSet center x position\n" \
            "  -y   <value>\t\tSet center y position\n" \
            "  -z   <value>\t\tSet zoom level (z position, smaller means further in)\n" \
@@ -181,7 +181,7 @@ void PrintCmdLineHelp() {
            "  -sx  <value>\t\tSet starting z.x\n" \
            "  -sy  <value>\t\tSet starting z.y\n" \
            "  -spp <value>\t\tSet samples per pixel (Lanczos resampling), will be rounded down to next square number\n" \
-           "  -o   <file>\t\tSet the output filename (default 'output.bmp', not used with -gl)\n" \
+           "  -o   <file>\t\tSet the output filename (default 'output.bmp', not used unless -nogl is specified)\n" \
            "  -ww  <value>\t\tSet window width  (with -gl)\n" \
            "  -wh  <value>\t\tSet window height (with -gl)\n" \
            "  -f   <file>\t\tProcess contents of <file> as command line (always executed first)\n" \
